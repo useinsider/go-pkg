@@ -1,0 +1,6 @@
+*.env
+/vendor
+tags
+.idea
+*.DS_Store
+/.vscode
