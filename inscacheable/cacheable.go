@@ -8,18 +8,34 @@ import (
 type Cacher[K comparable, V any] interface {
 	Get(k K) V
 	Set(k K, v V, ttl time.Duration)
+	Exists(k K) bool
+	Delete(k K)
 }
 
 type Cache[K comparable, V any] struct {
 	cache *ttlcache.Cache[K, V]
 }
 
+// Get returns a value at the given key.
+// It is non-null safe method, so be sure to use Exists before getting the value.
 func (c *Cache[K, V]) Get(k K) V {
 	return c.cache.Get(k).Value()
 }
 
+// Set stores the value at the given key.
+// It accepts ttl=0 that indicates the default TTL given at initialization should be used.
 func (c *Cache[K, V]) Set(k K, v V, ttl time.Duration) {
 	c.cache.Set(k, v, ttl)
+}
+
+// Exists checks if key is set in the cache.
+func (c *Cache[K, V]) Exists(k K) bool {
+	return c.cache.Get(k) != nil
+}
+
+// Delete deletes the key from the cache.
+func (c *Cache[K, V]) Delete(k K) {
+	c.cache.Delete(k)
 }
 
 // Cacheable is the main function that should be used as
@@ -54,6 +70,10 @@ func makeCache[K comparable, V any](ttl *time.Duration, loader ttlcache.LoaderFu
 }
 
 func makeLoader[K comparable, V any](getter func(key K) V) ttlcache.LoaderFunc[K, V] {
+	if getter == nil {
+		return nil
+	}
+
 	fn :=
 		func(c *ttlcache.Cache[K, V], key K) *ttlcache.Item[K, V] {
 			var v = getter(key)
