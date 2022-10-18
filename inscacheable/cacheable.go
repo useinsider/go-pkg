@@ -28,10 +28,12 @@ func (c *Cache[K, V]) Set(k K, v V, ttl time.Duration) {
 	c.cache.Set(k, v, ttl)
 }
 
+// Exists checks if key is set in the cache.
 func (c *Cache[K, V]) Exists(k K) bool {
 	return c.cache.Get(k) != nil
 }
 
+// Delete deletes the key from the cache.
 func (c *Cache[K, V]) Delete(k K) {
 	c.cache.Delete(k)
 }
