@@ -1,0 +1,66 @@
+# This is a basic workflow to create GitHub Issues using the Checkmarx CxFlow GitHub Action.  It runs on a pull-request to the main branch.
+#
+# The following GitHub Secrets must be first defined:
+#   - CHECKMARX_URL
+#   - CHECKMARX_USER
+#   - CHECKMARX_PASSWORD
+#   - CHECKMARX_CLIENT_SECRET
+#   - GH_TOKEN
+#
+# Update the 'team' field to reflect the team name used in Checkmarx.
+#
+# For full documentation,including a list of all inputs, please refer to the README https://github.com/checkmarx-ts/checkmarx-cxflow-github-action
+name: CxFlow-GitHub-Pull-Request
+# Controls when the action will run. Triggers the workflow on push or pull request events but only for the master branch
+on:
+  pull_request:
+    types: [ready_for_review]
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel - this job is specifically configured to use the Checkmarx CxFlow Action
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on - Ubuntu is required as Docker is leveraged for the action
+    runs-on: self-runner-node
+    steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - uses: actions/checkout@v2
+    - name: Checkmarx CxFlow Action
+      id: checkmarx
+      uses: checkmarx-ts/checkmarx-cxflow-github-action@v1.4
+      with:
+        project: ${{ github.repository }}-PR
+        team: ${{ secrets.CHECKMARX_TEAMS }}
+        checkmarx_url: ${{ secrets.CHECKMARX_URL }}   # To be stored in GitHub Secrets.
+        checkmarx_username: ${{ secrets.CHECKMARX_USERNAME }}  # To be stored in GitHub Secrets.
+        checkmarx_password: ${{ secrets.CHECKMARX_PASSWORD }}  # To be stored in GitHub Secrets.
+        checkmarx_client_secret: ${{ secrets.CHECKMARX_CLIENT_SECRET }}  # To be stored in GitHub Secrets.
+        scan-preset: Checkmarx Default
+        incremental: true
+        break_build: false
+        scanners: sast
+        params: --namespace=${{ github.repository_owner }} --cx-flow.filterStatus=New --repo-name=${{ github.event.repository.name }} --branch=${{ github.head_ref }} --cx-flow.filterSeverity --cx-flow.filterCategory
+    - name: The job has failed
+      if: ${{ failure() }}
+      run: |
+        python -c '
+        import json,sys,requests;
+        github_result = {"repository": "'${{ github.repository }}'", "server_url": "'${{ github.server_url }}'", "run_id": "'${{ github.run_id }}'"};
+        request = {"checkmarx_result": "empty", "github": github_result};
+        requests.post("'$LambdaWebHook'", json=request);'
+      env:
+        LambdaWebHook: ${{ secrets.CHECKMARX_LAMBDA_WEBHOOK }}
+    - name: Checkmarx Response Send to Lambda
+      id: slack-notification
+      if: ${{ success() }}
+      run: |
+        python -c '
+        import json,sys,requests;
+        output=open("./cx.sarif");
+        json_result=json.loads(output.read());
+        response="";
+        json_result = json_result.get("runs", [{}])[0].get("tool", {}).get("driver", {}).get("rules", []);
+        github_result = {"repository": "'${{ github.repository }}'", "server_url": "'${{ github.server_url }}'", "run_id": "'${{ github.run_id }}'"};
+        request = {"checkmarx_result": json_result, "github": github_result};
+        requests.post("'$LambdaWebHook'", json=request);'
+      env:
+        LambdaWebHook: ${{ secrets.CHECKMARX_LAMBDA_WEBHOOK }}
