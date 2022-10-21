@@ -1,0 +1,52 @@
+name: Trivy Vulnerability Scanner
+on:
+  pull_request:
+    types: [ready_for_review]
+jobs:
+  build:
+    name: Build
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Install Trivy
+        run: |
+          sudo apt-get install wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install trivy
+      - name: Trivy Scanner
+        run: |
+          python -c '
+          import glob, os;
+          files = glob.glob("**/Dockerfile", recursive=True);
+          count = 0;
+          for file in files:
+            diff_command1 =  f"git diff origin/main -- {file} > diff1.txt";
+            diff_command2 =  f"git diff origin/master -- {file} > diff2.txt";
+            os.system(diff_command1);
+            os.system(diff_command2);
+            main_lenght = len(open("./diff1.txt", "r").read());
+            master_lenght = len(open("./diff2.txt", "r").read());
+            if len(open("./diff1.txt", "r").read()) + len(open("./diff2.txt", "r").read()) > 0:
+              build_command = f"docker build -f {file} -t image{count} "+("/".join(file.split("/")[0:-1]) or ".");
+              os.system(build_command);
+              os.system(f"trivy image image{count} -f json -o trivy-result{count}.json --severity=CRITICAL,HIGH,MEDIUM");
+              count+=1; 
+          print("Build Finished")'
+      - name: Trivy Response Send to Lambda
+        run: |
+          python -c '
+          import json,sys,requests,glob;
+          files = glob.glob("trivy-result*");
+          for file in files:
+            output=open(f"./{file}");
+            json_result=json.loads(output.read());
+            github_result = {"repository": "'${{ github.repository }}'", "server_url": "'${{ github.server_url }}'", "run_id": "'${{ github.run_id }}'"};
+            request = {"trivy_result": json_result, "github": github_result};
+            requests.post("'$LambdaWebHook'", json=request);'
+        env:
+          LambdaWebHook: ${{ secrets.CHECKMARX_LAMBDA_WEBHOOK }}
