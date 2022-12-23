@@ -32,9 +32,12 @@ jobs:
       run: |
         python -c '
         import json,sys,requests;
-        output=open("./gitleaks-report.json");
+        try:
+            output=open("./gitleaks-report.json");
+        except IOError:
+            sys.exit(0);
         json_result=json.loads(output.read());
-        github_result = {"repository": "'${{ github.repository }}'", "server_url": "'${{ github.server_url }}'", "run_id": "'${{ github.run_id }}'"};
+        github_result = {"repository": "'${{ github.repository }}'", "server_url": "'${{ github.server_url }}'", "run_id": "'${{ github.run_id }}'", "pr_number": "'${{ github.event.number }}'"};
         request_json = {"gitleaks_result": json_result,"github": github_result};
         requests.post("'$LambdaWebHook'", json=request_json)'    
       env:
