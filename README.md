@@ -25,3 +25,9 @@ import (
 )
 ...
 ```
+
+## Test
+
+```bash
+go test ./... -count=1
+```
