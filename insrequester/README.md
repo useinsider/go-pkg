@@ -62,7 +62,7 @@ For setting a timeout on requests, you can utilize the WithTimeout method:
 
 ```go
 timeoutSeconds := 30
-requester.WithTimeout(timeoutSeconds)
+requester.WithTimeout(timeoutSeconds) // this timeout overrides the default timeout
 ```
 
 ### Loading Middlewares
