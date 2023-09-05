@@ -105,7 +105,8 @@ func (r *Request) sendRequest(httpMethod string, re RequestEntity) (*http.Respon
 		if res.StatusCode >= http.StatusInternalServerError {
 			outerErr = err
 			return err
-
+		} else {
+			outerErr = nil
 		}
 
 		return nil
