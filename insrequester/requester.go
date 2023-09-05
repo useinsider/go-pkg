@@ -10,7 +10,6 @@ import (
 	goresilienceErrors "github.com/slok/goresilience/errors"
 	"github.com/slok/goresilience/retry"
 	"github.com/slok/goresilience/timeout"
-	"github.com/useinsider/go-pkg/inscodeerr"
 	"net/http"
 	"time"
 )
@@ -88,9 +87,11 @@ func (r *Request) sendRequest(httpMethod string, re RequestEntity) (*http.Respon
 	}
 
 	runnerErr := r.runner.Run(context.TODO(), func(ctx context.Context) error {
-		req, err := http.NewRequest(httpMethod, re.Endpoint, bytes.NewReader(re.Body))
-		if err != nil {
-			res, outerErr = nil, err
+		var req *http.Request
+
+		req, outerErr = http.NewRequest(httpMethod, re.Endpoint, bytes.NewReader(re.Body))
+		if outerErr != nil {
+			res = nil
 			return nil
 		}
 
@@ -103,25 +104,23 @@ func (r *Request) sendRequest(httpMethod string, re RequestEntity) (*http.Respon
 		}
 
 		if res.StatusCode >= http.StatusInternalServerError {
-			outerErr = err
+			err := errors.New(fmt.Sprintf("status code: %v", res.StatusCode))
 			return err
-		} else {
-			outerErr = nil
 		}
 
 		return nil
 	})
 
 	if runnerErr == goresilienceErrors.ErrCircuitOpen {
-		return nil, errors.Wrap(runnerErr, fmt.Sprintf("%v", outerErr))
+		return nil, ErrCircuitBreakerOpen
+	}
+
+	if runnerErr == goresilienceErrors.ErrTimeout {
+		return nil, ErrTimeout
 	}
 
 	if outerErr != nil {
-		return nil, inscodeerr.CodeErr{
-			Code:    res.StatusCode,
-			Message: outerErr.Error(),
-			Err:     outerErr,
-		}
+		return nil, outerErr
 	}
 
 	return res, nil
