@@ -104,19 +104,10 @@ func (r *Request) sendRequest(httpMethod string, re RequestEntity) (*http.Respon
 
 		if res.StatusCode >= http.StatusInternalServerError {
 			outerErr = err
-			return inscodeerr.CodeErr{
-				Code:    res.StatusCode,
-				Message: fmt.Sprintf("status code: %v", res.StatusCode),
-			}
+			return err
+
 		}
 
-		if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
-			outerErr = inscodeerr.CodeErr{
-				Code:    res.StatusCode,
-				Message: fmt.Sprintf("status code: %v", res.StatusCode),
-			}
-			return nil
-		}
 		return nil
 	})
 
@@ -125,7 +116,11 @@ func (r *Request) sendRequest(httpMethod string, re RequestEntity) (*http.Respon
 	}
 
 	if outerErr != nil {
-		return nil, outerErr
+		return nil, inscodeerr.CodeErr{
+			Code:    res.StatusCode,
+			Message: outerErr.Error(),
+			Err:     outerErr,
+		}
 	}
 
 	return res, nil
