@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/pkg/errors"
 	"github.com/slok/goresilience"
 	"github.com/slok/goresilience/circuitbreaker"
 	goresilienceErrors "github.com/slok/goresilience/errors"
@@ -106,8 +105,7 @@ func (r *Request) sendRequest(httpMethod string, re RequestEntity) (*http.Respon
 		if res.StatusCode >= 100 && res.StatusCode < 200 ||
 			res.StatusCode == 429 ||
 			res.StatusCode >= 500 && res.StatusCode <= 599 {
-			err := errors.New(fmt.Sprintf("status code: %v", res.StatusCode))
-			return err
+			return ErrRetryable
 		}
 
 		return nil
