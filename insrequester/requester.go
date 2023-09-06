@@ -4,13 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/pkg/errors"
 	"github.com/slok/goresilience"
 	"github.com/slok/goresilience/circuitbreaker"
 	goresilienceErrors "github.com/slok/goresilience/errors"
 	"github.com/slok/goresilience/retry"
 	"github.com/slok/goresilience/timeout"
-	"github.com/useinsider/go-pkg/inscodeerr"
 	"net/http"
 	"time"
 )
@@ -88,9 +86,11 @@ func (r *Request) sendRequest(httpMethod string, re RequestEntity) (*http.Respon
 	}
 
 	runnerErr := r.runner.Run(context.TODO(), func(ctx context.Context) error {
-		req, err := http.NewRequest(httpMethod, re.Endpoint, bytes.NewReader(re.Body))
-		if err != nil {
-			res, outerErr = nil, err
+		var req *http.Request
+
+		req, outerErr = http.NewRequest(httpMethod, re.Endpoint, bytes.NewReader(re.Body))
+		if outerErr != nil {
+			res = nil
 			return nil
 		}
 
@@ -102,26 +102,21 @@ func (r *Request) sendRequest(httpMethod string, re RequestEntity) (*http.Respon
 			return nil
 		}
 
-		if res.StatusCode >= http.StatusInternalServerError {
-			outerErr = err
-			return inscodeerr.CodeErr{
-				Code:    res.StatusCode,
-				Message: fmt.Sprintf("status code: %v", res.StatusCode),
-			}
+		if res.StatusCode >= 100 && res.StatusCode < 200 ||
+			res.StatusCode == 429 ||
+			res.StatusCode >= 500 && res.StatusCode <= 599 {
+			return ErrRetryable
 		}
 
-		if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
-			outerErr = inscodeerr.CodeErr{
-				Code:    res.StatusCode,
-				Message: fmt.Sprintf("status code: %v", res.StatusCode),
-			}
-			return nil
-		}
 		return nil
 	})
 
 	if runnerErr == goresilienceErrors.ErrCircuitOpen {
-		return nil, errors.Wrap(runnerErr, fmt.Sprintf("%v", outerErr))
+		return nil, ErrCircuitBreakerOpen
+	}
+
+	if runnerErr == goresilienceErrors.ErrTimeout {
+		return nil, ErrTimeout
 	}
 
 	if outerErr != nil {
