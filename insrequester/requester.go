@@ -103,7 +103,9 @@ func (r *Request) sendRequest(httpMethod string, re RequestEntity) (*http.Respon
 			return nil
 		}
 
-		if res.StatusCode >= http.StatusInternalServerError {
+		if res.StatusCode >= 100 && res.StatusCode < 200 ||
+			res.StatusCode == 429 ||
+			res.StatusCode >= 500 && res.StatusCode <= 599 {
 			err := errors.New(fmt.Sprintf("status code: %v", res.StatusCode))
 			return err
 		}
