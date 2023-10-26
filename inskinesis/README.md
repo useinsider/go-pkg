@@ -27,7 +27,7 @@ To use the `inskinesis` package in your Go project, you can install it using Go 
 your project directory:
 
 ```bash
-go get github.com/go-pkg/inskinesis
+go get github.com/useinsider/go-pkg/inskinesis
 ```
 
 ## Getting Started
@@ -37,7 +37,7 @@ Here's a quick guide on how to get started with the `inskinesis` package:
 1. Import the package in your Go code:
 
    ```go
-   import "github.com/go-pkg/inskinesis"
+   import "github.com/useinsider/go-pkg/inskinesis"
    ```
 
 2. Create a configuration for your Kinesis stream:
@@ -114,16 +114,16 @@ based on your needs, including the region, stream name, batch sizes, and partiti
 Here's an example of how to use the package:
 
 ```go
-import "github.com/go-pkg/inskinesis"
+import "github.com/useinsider/go-pkg/inskinesis"
 
 config := inskinesis.Config{
-Region:                 "your-aws-region",
-StreamName:             "your-kinesis-stream-name",
-Partitioner:            nil, // Optionally provide a partitioner function
-MaxStreamBatchSize:     100, // Maximum size of each batch of records
-MaxStreamBatchByteSize: 1024 * 1024, // Maximum size in bytes for each batch
-MaxBatchSize:           500,         // Maximum size of the log buffer
-MaxGroup:               10, // Maximum number of concurrent groups for sending records
+    Region:                 "your-aws-region",
+    StreamName:             "your-kinesis-stream-name",
+    Partitioner:            nil, // Optionally provide a partitioner function
+    MaxStreamBatchSize:     100, // Maximum size of each batch of records
+    MaxStreamBatchByteSize: 1024 * 1024, // Maximum size in bytes for each batch
+    MaxBatchSize:           500,         // Maximum size of the log buffer
+    MaxGroup:               10, // Maximum number of concurrent groups for sending records
 }
 
 stream, err := inskinesis.NewKinesis(config)
@@ -148,12 +148,12 @@ Here's an example of how to use the error channels:
 
 ```go
 go func () {
-for {
-select {
-case err := <-stream.Error():
-sentry.Error(err)
-}
-}
+    for {
+        select {
+        case err := <-stream.Error():
+            sentry.Error(err)
+        }
+    }
 }()
 
 ```
