@@ -11,7 +11,6 @@ The `inskinesis` package is a Go library designed to facilitate streaming data t
 - [Usage](#usage)
 - [Error Handling](#error-handling)
 - [Contributing](#contributing)
-- [License](#license)
 
 ## Introduction
 
@@ -138,7 +137,3 @@ go func() {
 ## Contributing
 
 If you would like to contribute to the `inskinesis` package, please follow standard Go community guidelines for contributions. You can create issues, submit pull requests, and help improve the package for everyone.
-
-## License
-
-This package is available under the MIT License. You can find the full license details in the LICENSE file included in the package. Make sure to review and comply with the license when using the package in your project.
