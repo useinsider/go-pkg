@@ -1,6 +1,7 @@
 # Kinesis Package
 
-The `inskinesis` package is a Go library designed to facilitate streaming data to Amazon Kinesis streams. This README provides an overview of the package's functionality and usage.
+The `inskinesis` package is a Go library designed to facilitate streaming data to Amazon Kinesis streams. This README
+provides an overview of the package's functionality and usage.
 
 ## Table of Contents
 
@@ -9,16 +10,21 @@ The `inskinesis` package is a Go library designed to facilitate streaming data t
 - [Getting Started](#getting-started)
 - [Package Structure](#package-structure)
 - [Usage](#usage)
-- [Error Handling](#error-handling)
-- [Contributing](#contributing)
+- [Error Handling](#error-handling)r
+- [Contributing](#contributing
+  )
 
 ## Introduction
 
-The `inskinesis` package is designed to make it easier to stream data to Amazon Kinesis streams in your Go applications. It provides a simple interface for sending records to a Kinesis stream while handling batching, partitioning, and retries. This can be especially useful for applications that generate a high volume of data and need to send it to Kinesis efficiently.
+The `inskinesis` package is designed to make it easier to stream data to Amazon Kinesis streams in your Go applications.
+It provides a simple interface for sending records to a Kinesis stream while handling batching, partitioning, and
+retries. This can be especially useful for applications that generate a high volume of data and need to send it to
+Kinesis efficiently.
 
 ## Installation
 
-To use the `inskinesis` package in your Go project, you can install it using Go modules. Run the following command in your project directory:
+To use the `inskinesis` package in your Go project, you can install it using Go modules. Run the following command in
+your project directory:
 
 ```bash
 go get github.com/go-pkg/inskinesis
@@ -47,6 +53,21 @@ Here's a quick guide on how to get started with the `inskinesis` package:
        MaxGroup:               10, // Maximum number of concurrent groups for sending records
    }
    ```
+
+| Field                  | Default Value      | Description                                                                                                                                       |
+|------------------------|--------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
+| Region                 | N/A                | The AWS region where the Kinesis stream is located. **Required**                                                                                  |
+| StreamName             | N/A                | The name of the Kinesis stream. **Required**                                                                                                      |
+| Partitioner            | UUID               | An optional partitioner function used to determine the partition key for records. If not provided, a default UUID-based partitioner is used.      |
+| MaxStreamBatchSize     | 100                | The maximum size of each batch of records to be sent to the stream.                                                                               |
+| MaxStreamBatchByteSize | 256 KB (2^18 byte) | The maximum size (in bytes) of each batch of records.                                                                                             |
+| MaxBatchSize           | 500                | The maximum size of the log buffer for accumulating log records before batching.                                                                  |
+| MaxGroup               | 1                  | The maximum number of concurrent groups for sending records. If you want to send records concurrently, set this value to a number greater than 1. |
+| RetryCount             | 3                  | The number of times to retry sending a batch of records to the stream.                                                                            |
+| RetryInterval          | 100 ms             | The interval between retries.                                                                                                                     |
+
+Please note that `N/A` in the Default Value column indicates that these fields are required and do not have default
+values.
 
 3. Create a Kinesis stream instance:
 
@@ -80,14 +101,15 @@ Here's a quick guide on how to get started with the `inskinesis` package:
 
 The `inskinesis` package is organized as follows:
 
-- `inskinesis` package: The main package containing the `StreamInterface`, `stream`, and related functionality for streaming records to Kinesis.
+- `inskinesis` package: The main package containing the `StreamInterface`, `stream`, and related functionality for
+  streaming records to Kinesis.
 - `PartitionerFunction`: A customizable partitioning function for determining the partition key of records.
-- `CreateBatches`: A utility function for creating batches of records.
 - Various error handling and logging functionality.
 
 ## Usage
 
-The package provides a simple interface for streaming records to a Kinesis stream. You can customize the configuration based on your needs, including the region, stream name, batch sizes, and partitioning function.
+The package provides a simple interface for streaming records to a Kinesis stream. You can customize the configuration
+based on your needs, including the region, stream name, batch sizes, and partitioning function.
 
 Here's an example of how to use the package:
 
@@ -95,18 +117,18 @@ Here's an example of how to use the package:
 import "github.com/go-pkg/inskinesis"
 
 config := inskinesis.Config{
-    Region:                 "your-aws-region",
-    StreamName:             "your-kinesis-stream-name",
-    Partitioner:            nil, // Optionally provide a partitioner function
-    MaxStreamBatchSize:     100, // Maximum size of each batch of records
-    MaxStreamBatchByteSize: 1024 * 1024, // Maximum size in bytes for each batch
-    MaxBatchSize:           500, // Maximum size of the log buffer
-    MaxGroup:               10, // Maximum number of concurrent groups for sending records
+Region:                 "your-aws-region",
+StreamName:             "your-kinesis-stream-name",
+Partitioner:            nil, // Optionally provide a partitioner function
+MaxStreamBatchSize:     100, // Maximum size of each batch of records
+MaxStreamBatchByteSize: 1024 * 1024, // Maximum size in bytes for each batch
+MaxBatchSize:           500,         // Maximum size of the log buffer
+MaxGroup:               10, // Maximum number of concurrent groups for sending records
 }
 
 stream, err := inskinesis.NewKinesis(config)
 if err != nil {
-    // Handle the error
+// Handle the error
 }
 
 // Send records to the stream
@@ -118,22 +140,25 @@ stream.FlushAndStopStreaming()
 
 ## Error Handling
 
-The `inskinesis` package provides error channels for receiving errors during streaming. You can use these channels to handle errors in your application gracefully. It's important to monitor the error channels to ensure the robustness of your data streaming process.
+The `inskinesis` package provides error channels for receiving errors during streaming. You can use these channels to
+handle errors in your application gracefully. It's important to monitor the error channels to ensure the robustness of
+your data streaming process.
 
 Here's an example of how to use the error channels:
 
 ```go
-go func() {
-   for {
-      select {
-      case err := <-stream.Error():
-        sentry.Error(err)
-      }
-   }
+go func () {
+for {
+select {
+case err := <-stream.Error():
+sentry.Error(err)
+}
+}
 }()
 
 ```
 
 ## Contributing
 
-If you would like to contribute to the `inskinesis` package, please follow standard Go community guidelines for contributions. You can create issues, submit pull requests, and help improve the package for everyone.
+If you would like to contribute to the `inskinesis` package, please follow standard Go community guidelines for
+contributions. You can create issues, submit pull requests, and help improve the package for everyone.

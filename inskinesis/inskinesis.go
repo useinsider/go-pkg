@@ -13,11 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/kinesis"
 )
 
-const (
-	outputSeparator = byte('\n')
-	RetryCount      = 3
-	RetryWaitTime   = 100 * time.Millisecond
-)
+const outputSeparator = byte('\n')
 
 type KinesisInterface interface {
 	PutRecords(input *kinesis.PutRecordsInput) (*kinesis.PutRecordsOutput, error)
@@ -49,6 +45,9 @@ type stream struct {
 	maxStreamBatchSize     int // Maximum size of each batch of records to be sent to the stream.
 	maxStreamBatchByteSize int // Maximum size (in bytes) of each batch of records.
 	maxGroup               int // Maximum number of concurrent groups for sending records.
+
+	RetryCount    int           // Maximum number of retries for failed record submissions.
+	RetryWaitTime time.Duration // Time to wait between retries for failed record submissions.
 
 	mu               sync.Mutex         // Mutex to synchronize access to the stream.
 	wgLogChan        *sync.WaitGroup    // WaitGroup to manage goroutines.
@@ -129,6 +128,10 @@ func NewKinesis(config Config) (StreamInterface, error) {
 
 	if s.partitioner == nil {
 		s.partitioner = PartitionerPointer(Partitioners.UUID)
+	}
+
+	if s.RetryWaitTime == 0 {
+		s.RetryWaitTime = 100 * time.Millisecond
 	}
 
 	s.start()
@@ -257,7 +260,7 @@ func (s *stream) PutRecords(batch []interface{}) (int, error) {
 		return len(batch), err
 	}
 
-	failedCount, err := s.putRecords(transformed, RetryCount)
+	failedCount, err := s.putRecords(transformed, s.RetryCount)
 
 	return failedCount, err
 }
@@ -270,7 +273,7 @@ func (s *stream) Put(record interface{}) {
 
 func (s *stream) putRecords(batch []*kinesis.PutRecordsRequestEntry, retryCount int) (int, error) {
 	fmt.Printf("Sending %d records to Kinesis stream %s\n", len(batch), s.name)
-	if retryCount == 0 {
+	if retryCount == -1 {
 		fmt.Printf("Retry count exceeded for Kinesis stream %s\n", s.name)
 		return len(batch), errors.New("retry count exceeded")
 	}
@@ -292,7 +295,7 @@ func (s *stream) putRecords(batch []*kinesis.PutRecordsRequestEntry, retryCount 
 		retryCount--
 
 		fmt.Printf("Retrying %d records to Kinesis stream %s\n", len(batch), s.name)
-		time.Sleep(RetryWaitTime)
+		time.Sleep(s.RetryWaitTime)
 		failed, err := s.putRecords(batch, retryCount)
 		if err != nil {
 			return failed, err

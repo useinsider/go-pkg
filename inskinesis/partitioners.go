@@ -15,10 +15,6 @@ func (p *partitionersCollection) UUID(_ interface{}) string {
 	return uuid.New().String()
 }
 
-func UUID(_ interface{}) string {
-	return uuid.New().String()
-}
-
 // PartitionerPointer returns a pointer to the PartitionerPointer value passed in.
 func PartitionerPointer(function PartitionerFunction) *PartitionerFunction {
 	fn := &function
