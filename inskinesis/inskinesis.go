@@ -198,15 +198,7 @@ func (s *stream) startBatchStreaming() {
 	for {
 		select {
 		case batch := <-s.batchChannel:
-			concurrentLimiter <- struct{}{}
-			go func() {
-				defer func() {
-					s.wgBatchChan.Done()
-					<-concurrentLimiter
-				}()
-
-				s.putSingleBatch(batch)
-			}()
+			s.sendSingleBatch(concurrentLimiter, batch)
 		case <-s.stopBatchChannel:
 			go func() {
 				defer s.wgBatchChan.Done()
@@ -221,25 +213,35 @@ func (s *stream) startBatchStreaming() {
 				batches, _ := createBatches(lastBatch, s.maxStreamBatchSize, s.maxStreamBatchByteSize)
 
 				for _, b := range batches {
-					s.putSingleBatch(b)
+					s.wgBatchChan.Add(1)
+					batch := b
+					s.sendSingleBatch(concurrentLimiter, batch)
 				}
 			}()
 		}
 	}
 }
 
-func (s *stream) putSingleBatch(batch []interface{}) {
-	s.totalCount += len(batch)
-	failedCount, err := s.PutRecords(batch)
-	s.failedCount += failedCount
-	if err != nil {
-		fmt.Printf("Error sending records to Kinesis stream %s: %v\n", s.name, err)
-		s.errChannel <- err
+func (s *stream) sendSingleBatch(concurrentLimiter chan struct{}, batch []interface{}) {
+	concurrentLimiter <- struct{}{}
+	go func() {
+		defer func() {
+			s.wgBatchChan.Done()
+			<-concurrentLimiter
+		}()
 
-		return
-	}
+		s.totalCount += len(batch)
+		failedCount, err := s.PutRecords(batch)
+		s.failedCount += failedCount
+		if err != nil {
+			fmt.Printf("Error sending records to Kinesis stream %s: %v\n", s.name, err)
+			s.errChannel <- err
 
-	fmt.Printf("Sent %d records to Kinesis stream %s\n", len(batch), s.name)
+			return
+		}
+
+		fmt.Printf("Sent %d records to Kinesis stream %s\n", len(batch), s.name)
+	}()
 }
 
 func (s *stream) start() {
@@ -273,7 +275,7 @@ func (s *stream) Put(record interface{}) {
 
 func (s *stream) putRecords(batch []*kinesis.PutRecordsRequestEntry, retryCount int) (int, error) {
 	fmt.Printf("Sending %d records to Kinesis stream %s\n", len(batch), s.name)
-	if retryCount == -1 {
+	if retryCount < 0 {
 		fmt.Printf("Retry count exceeded for Kinesis stream %s\n", s.name)
 		return len(batch), errors.New("retry count exceeded")
 	}
@@ -354,6 +356,10 @@ func (s *stream) wrapWithPutRecordsRequestEntry(records [][]byte) []*kinesis.Put
 	return transformedRecords
 }
 func addOutputSeparatorIfNeeded(record []byte) []byte {
+	if len(record) == 0 {
+		return record
+	}
+
 	if record[len(record)-1] != outputSeparator {
 		return append(record, outputSeparator)
 	}
