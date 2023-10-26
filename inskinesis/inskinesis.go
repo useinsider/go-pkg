@@ -46,8 +46,8 @@ type stream struct {
 	maxStreamBatchByteSize int // Maximum size (in bytes) of each batch of records.
 	maxGroup               int // Maximum number of concurrent groups for sending records.
 
-	RetryCount    int           // Maximum number of retries for failed record submissions.
-	RetryWaitTime time.Duration // Time to wait between retries for failed record submissions.
+	retryCount    int           // Maximum number of retries for failed record submissions.
+	retryWaitTime time.Duration // Time to wait between retries for failed record submissions.
 
 	mu               sync.Mutex         // Mutex to synchronize access to the stream.
 	wgLogChan        *sync.WaitGroup    // WaitGroup to manage goroutines.
@@ -130,8 +130,8 @@ func NewKinesis(config Config) (StreamInterface, error) {
 		s.partitioner = PartitionerPointer(Partitioners.UUID)
 	}
 
-	if s.RetryWaitTime == 0 {
-		s.RetryWaitTime = 100 * time.Millisecond
+	if s.retryWaitTime == 0 {
+		s.retryWaitTime = 100 * time.Millisecond
 	}
 
 	s.start()
@@ -260,7 +260,7 @@ func (s *stream) PutRecords(batch []interface{}) (int, error) {
 		return len(batch), err
 	}
 
-	failedCount, err := s.putRecords(transformed, s.RetryCount)
+	failedCount, err := s.putRecords(transformed, s.retryCount)
 
 	return failedCount, err
 }
@@ -295,7 +295,7 @@ func (s *stream) putRecords(batch []*kinesis.PutRecordsRequestEntry, retryCount 
 		retryCount--
 
 		fmt.Printf("Retrying %d records to Kinesis stream %s\n", len(batch), s.name)
-		time.Sleep(s.RetryWaitTime)
+		time.Sleep(s.retryWaitTime)
 		failed, err := s.putRecords(batch, retryCount)
 		if err != nil {
 			return failed, err
