@@ -4,6 +4,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/kinesis"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 	"testing"
 )
 
@@ -151,55 +152,95 @@ func Test_CreateBatches(t *testing.T) {
 				},
 			},
 		}
-		actual, err := CreateBatches(records, 2, 100)
+		actual, err := createBatches(records, 2, 100)
 		assert.Nil(t, err)
 		assert.Equal(t, expected, actual)
 	})
 
 	t.Run("it_should_return_error_when_failed_to_create_batches", func(t *testing.T) {
 		records := []interface{}{make(chan int)}
-		batches, err := CreateBatches(records, 2, 100)
+		batches, err := createBatches(records, 2, 100)
 		assert.Error(t, err)
 		assert.Nil(t, batches)
 	})
 }
 
-//
-//func Test_putRecords(t *testing.T) {
-//	s := stream{
-//		name:          "test-stream",
-//		partitioner:   PartitionerPointer(Partitioners.UUID),
-//		kinesisClient: NewMockKinesisInterface(gomock.NewController(t)),
-//	}
-//
-//	t.Run("it_should_retry", func(t *testing.T) {
-//		records := []*kinesis.PutRecordsRequestEntry{
-//			{
-//				Data: []byte("record1\n"),
-//			},
-//			{
-//				Data: []byte("record2\n"),
-//			},
-//		}
-//
-//		resp := kinesis.PutRecordsOutput{
-//			FailedRecordCount: aws.Int64(2),
-//			Records: []*kinesis.PutRecordsResultEntry{
-//				{
-//					ErrorCode: aws.String("error1"),
-//				},
-//				{
-//					ErrorCode: aws.String("error2"),
-//				},
-//			},
-//		}
-//
-//		s.kinesisClient.(*MockKinesisInterface).EXPECT().PutRecords(&kinesis.PutRecordsInput{
-//			Records:    records,
-//			StreamName: aws.String(s.name),
-//		}).Times(1).Return(&resp, nil)
-//		failedCount, _ := s.putRecords(records, 3)
-//
-//		assert.Equal(t, 2, failedCount)
-//	})
-//}
+var testPartition = "test-partition"
+
+func fakePartitioner(_ interface{}) string {
+	return testPartition
+}
+
+func Test_putRecords(t *testing.T) {
+	s := stream{
+		name:          "test-stream",
+		partitioner:   PartitionerPointer(fakePartitioner),
+		kinesisClient: NewMockKinesisInterface(gomock.NewController(t)),
+	}
+
+	t.Run("it_should_retry", func(t *testing.T) {
+		records := []*kinesis.PutRecordsRequestEntry{
+			{
+				Data:         []byte("record1\n"),
+				PartitionKey: aws.String(testPartition),
+			},
+			{
+				Data:         []byte("record2\n"),
+				PartitionKey: aws.String(testPartition),
+			},
+		}
+
+		resp := kinesis.PutRecordsOutput{
+			FailedRecordCount: aws.Int64(2),
+			Records: []*kinesis.PutRecordsResultEntry{
+				{
+					ErrorCode: aws.String("error1"),
+				},
+				{
+					ErrorCode: aws.String("error2"),
+				},
+			},
+		}
+
+		s.kinesisClient.(*MockKinesisInterface).EXPECT().PutRecords(&kinesis.PutRecordsInput{
+			Records:    records,
+			StreamName: aws.String(s.name),
+		}).Times(3).Return(&resp, nil)
+		failedCount, _ := s.putRecords(records, 3)
+
+		assert.Equal(t, 2, failedCount)
+	})
+
+	t.Run("it_should_not_retry_when_failed_record_count_is_zero", func(t *testing.T) {
+		records := []*kinesis.PutRecordsRequestEntry{
+			{
+				Data:         []byte("record1\n"),
+				PartitionKey: aws.String(testPartition),
+			},
+			{
+				Data:         []byte("record2\n"),
+				PartitionKey: aws.String(testPartition),
+			},
+		}
+
+		resp := kinesis.PutRecordsOutput{
+			FailedRecordCount: aws.Int64(0),
+			Records: []*kinesis.PutRecordsResultEntry{
+				{
+					ErrorCode: nil,
+				},
+				{
+					ErrorCode: nil,
+				},
+			},
+		}
+
+		s.kinesisClient.(*MockKinesisInterface).EXPECT().PutRecords(&kinesis.PutRecordsInput{
+			Records:    records,
+			StreamName: aws.String(s.name),
+		}).Times(1).Return(&resp, nil)
+		failedCount, _ := s.putRecords(records, 3)
+
+		assert.Equal(t, 0, failedCount)
+	})
+}

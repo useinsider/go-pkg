@@ -106,6 +106,7 @@ func NewKinesis(config Config) (StreamInterface, error) {
 		wgBatchChan:      &sync.WaitGroup{},
 		logChannel:       make(chan interface{}, 1000),
 		batchChannel:     make(chan []interface{}, 100),
+		errChannel:       make(chan error),
 		stopChannel:      make(chan bool),
 		stopBatchChannel: make(chan bool),
 	}
@@ -151,7 +152,7 @@ func (s *stream) startStreaming() {
 				batch := s.logBuffer
 				s.logBuffer = make([]interface{}, 0)
 
-				batches, err := CreateBatches(batch, s.maxStreamBatchSize, s.maxStreamBatchByteSize)
+				batches, err := createBatches(batch, s.maxStreamBatchSize, s.maxStreamBatchByteSize)
 				if err != nil {
 					s.errChannel <- err
 					continue
@@ -201,46 +202,41 @@ func (s *stream) startBatchStreaming() {
 					<-concurrentLimiter
 				}()
 
-				s.totalCount += len(batch)
-				failedCount, err := s.PutRecords(batch)
-				if err != nil {
-					fmt.Printf("Error sending records to Kinesis stream %s: %v\n", s.name, err)
-					s.errChannel <- err
-					return
-				}
-
-				fmt.Printf("Sent %d records to Kinesis stream %s\n", len(batch), s.name)
-
-				s.failedCount += failedCount
+				s.putSingleBatch(batch)
 			}()
 		case <-s.stopBatchChannel:
-			if len(s.logBuffer) == 0 {
-				s.wgBatchChan.Done()
-				return
-			}
+			go func() {
+				defer s.wgBatchChan.Done()
 
-			lastBatch := s.logBuffer
-			s.totalCount += len(lastBatch)
-			s.logBuffer = make([]interface{}, 0)
-
-			batches, _ := CreateBatches(lastBatch, s.maxStreamBatchSize, s.maxStreamBatchByteSize)
-
-			for _, b := range batches {
-				failedCount, err := s.PutRecords(b)
-				s.failedCount += failedCount
-				if err != nil {
-					fmt.Printf("Error sending records to Kinesis stream %s: %v\n", s.name, err)
-					s.errChannel <- err
-					s.wgBatchChan.Done()
+				if len(s.logBuffer) == 0 {
 					return
 				}
 
-			}
+				lastBatch := s.logBuffer
+				s.logBuffer = make([]interface{}, 0)
 
-			s.wgBatchChan.Done()
-			return
+				batches, _ := createBatches(lastBatch, s.maxStreamBatchSize, s.maxStreamBatchByteSize)
+
+				for _, b := range batches {
+					s.putSingleBatch(b)
+				}
+			}()
 		}
 	}
+}
+
+func (s *stream) putSingleBatch(batch []interface{}) {
+	s.totalCount += len(batch)
+	failedCount, err := s.PutRecords(batch)
+	s.failedCount += failedCount
+	if err != nil {
+		fmt.Printf("Error sending records to Kinesis stream %s: %v\n", s.name, err)
+		s.errChannel <- err
+
+		return
+	}
+
+	fmt.Printf("Sent %d records to Kinesis stream %s\n", len(batch), s.name)
 }
 
 func (s *stream) start() {
@@ -318,7 +314,7 @@ func (s *stream) transformRecords(records []interface{}) ([]*kinesis.PutRecordsR
 		}
 
 		transformedRecords = append(transformedRecords, &kinesis.PutRecordsRequestEntry{
-			Data:         append(js, outputSeparator),
+			Data:         addOutputSeparatorIfNeeded(js),
 			PartitionKey: aws.String((*s.partitioner)(js)),
 		})
 	}
@@ -347,47 +343,16 @@ func (s *stream) wrapWithPutRecordsRequestEntry(records [][]byte) []*kinesis.Put
 
 	for _, record := range records {
 		transformedRecords = append(transformedRecords, &kinesis.PutRecordsRequestEntry{
-			Data:         append(record, outputSeparator),
+			Data:         addOutputSeparatorIfNeeded(record),
 			PartitionKey: aws.String((*s.partitioner)(record)),
 		})
 	}
 
 	return transformedRecords
 }
-
-func CreateBatches(v interface{}, recordLimit int, byteLimit int) ([][]interface{}, error) {
-	records, ok := TakeSliceArg(v)
-	if !ok {
-		return nil, errors.New("invalid input")
+func addOutputSeparatorIfNeeded(record []byte) []byte {
+	if record[len(record)-1] != outputSeparator {
+		return append(record, outputSeparator)
 	}
-
-	var batches = make([][]interface{}, 0)
-	buffer := make([]interface{}, 0)
-	bufferSize := 0
-
-	for _, record := range records {
-		js, jsErr := json.Marshal(record)
-		if jsErr != nil {
-			return nil, jsErr
-		}
-
-		recordSize := len(js)
-		sizeExceeds := bufferSize+recordSize > byteLimit
-		bufferFull := len(buffer) == recordLimit
-
-		if len(buffer) > 0 && (bufferFull || sizeExceeds) {
-			batches = append(batches, buffer)
-			buffer = make([]interface{}, 0)
-			bufferSize = 0
-		}
-
-		buffer = append(buffer, record)
-		bufferSize += recordSize
-	}
-
-	if len(buffer) > 0 {
-		batches = append(batches, buffer)
-	}
-
-	return batches, nil
+	return record
 }
