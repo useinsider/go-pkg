@@ -205,7 +205,7 @@ func Test_putRecords(t *testing.T) {
 		s.kinesisClient.(*MockKinesisInterface).EXPECT().PutRecords(&kinesis.PutRecordsInput{
 			Records:    records,
 			StreamName: aws.String(s.name),
-		}).Times(3).Return(&resp, nil)
+		}).Times(4).Return(&resp, nil)
 		failedCount, _ := s.putRecords(records, 3)
 
 		assert.Equal(t, 2, failedCount)
