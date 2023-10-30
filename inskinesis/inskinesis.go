@@ -124,7 +124,7 @@ func NewKinesis(config Config) (StreamInterface, error) {
 	}
 
 	if s.maxStreamBatchByteSize == 0 {
-		s.maxStreamBatchByteSize = int(math.Pow(2, 10))
+		s.maxStreamBatchByteSize = int(math.Pow(2, 16))
 	}
 
 	if s.maxGroup == 0 {
