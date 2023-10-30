@@ -200,7 +200,7 @@ func (s *stream) startBatchStreaming() {
 	for {
 		select {
 		case batch := <-s.batchChannel:
-			s.sendSingleBatch(concurrentLimiter, batch)
+			s.sendSingleBatch(batch, concurrentLimiter)
 		case <-s.stopBatchChannel:
 			go func() {
 				defer s.wgBatchChan.Done()
@@ -217,7 +217,7 @@ func (s *stream) startBatchStreaming() {
 				for _, b := range batches {
 					s.wgBatchChan.Add(1)
 					batch := b
-					s.sendSingleBatch(concurrentLimiter, batch)
+					s.sendSingleBatch(batch, concurrentLimiter)
 				}
 			}()
 
@@ -226,7 +226,7 @@ func (s *stream) startBatchStreaming() {
 	}
 }
 
-func (s *stream) sendSingleBatch(concurrentLimiter chan struct{}, batch []interface{}) {
+func (s *stream) sendSingleBatch(batch []interface{}, concurrentLimiter chan struct{}) {
 	concurrentLimiter <- struct{}{}
 	go func() {
 		defer func() {
