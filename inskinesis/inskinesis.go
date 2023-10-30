@@ -71,6 +71,8 @@ type Config struct {
 	MaxStreamBatchByteSize int
 	MaxBatchSize           int
 	MaxGroup               int
+	RetryCount             int
+	RetryWaitTime          time.Duration
 }
 
 // NewKinesis creates a new Kinesis stream.
@@ -108,6 +110,9 @@ func NewKinesis(config Config) (StreamInterface, error) {
 		errChannel:       make(chan error),
 		stopChannel:      make(chan bool),
 		stopBatchChannel: make(chan bool),
+
+		retryCount:    config.RetryCount,
+		retryWaitTime: 100 * time.Millisecond,
 	}
 
 	if s.logBufferSize == 0 {
@@ -119,7 +124,7 @@ func NewKinesis(config Config) (StreamInterface, error) {
 	}
 
 	if s.maxStreamBatchByteSize == 0 {
-		s.maxStreamBatchByteSize = int(math.Pow(2, 18))
+		s.maxStreamBatchByteSize = int(math.Pow(2, 10))
 	}
 
 	if s.maxGroup == 0 {
@@ -148,9 +153,8 @@ func (s *stream) startStreaming() {
 	for {
 		select {
 		case record := <-s.logChannel:
-			s.mu.Lock()
+			s.totalCount++
 			s.logBuffer = append(s.logBuffer, record)
-			s.mu.Unlock()
 			if len(s.logBuffer) > s.logBufferSize {
 				batch := s.logBuffer
 				s.logBuffer = make([]interface{}, 0)
@@ -158,6 +162,7 @@ func (s *stream) startStreaming() {
 				batches, err := createBatches(batch, s.maxStreamBatchSize, s.maxStreamBatchByteSize)
 				if err != nil {
 					s.errChannel <- err
+					s.wgLogChan.Done()
 					continue
 				}
 
@@ -166,6 +171,7 @@ func (s *stream) startStreaming() {
 					s.batchChannel <- b
 				}
 			}
+
 			s.wgLogChan.Done()
 		case <-s.stopChannel:
 			s.stopAndWaitBatchStreaming()
@@ -180,8 +186,6 @@ func (s *stream) stopAndWaitBatchStreaming() {
 	s.wgBatchChan.Add(1)
 	s.stopBatchChannel <- true
 	s.wgBatchChan.Wait()
-
-	close(s.batchChannel)
 }
 
 func (s *stream) stopAndWaitLogStreaming() {
@@ -189,8 +193,6 @@ func (s *stream) stopAndWaitLogStreaming() {
 	s.wgLogChan.Add(1)
 	s.stopChannel <- true
 	s.wgLogChan.Wait()
-
-	close(s.logChannel)
 }
 
 func (s *stream) startBatchStreaming() {
@@ -218,6 +220,8 @@ func (s *stream) startBatchStreaming() {
 					s.sendSingleBatch(concurrentLimiter, batch)
 				}
 			}()
+
+			return
 		}
 	}
 }
@@ -230,7 +234,6 @@ func (s *stream) sendSingleBatch(concurrentLimiter chan struct{}, batch []interf
 			<-concurrentLimiter
 		}()
 
-		s.totalCount += len(batch)
 		failedCount, err := s.PutRecords(batch)
 		s.failedCount += failedCount
 		if err != nil {
@@ -251,7 +254,7 @@ func (s *stream) start() {
 
 func (s *stream) FlushAndStopStreaming() {
 	s.stopAndWaitLogStreaming()
-	close(s.errChannel)
+
 	fmt.Printf("%d/%d records sent to Kinesis stream %s\n", s.totalCount-s.failedCount, s.totalCount, s.name)
 }
 
