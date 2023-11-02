@@ -76,6 +76,7 @@ type Config struct {
 	MaxGroup               int
 	RetryCount             int
 	RetryWaitTime          time.Duration
+	Verbose                bool
 }
 
 // NewKinesis creates a new Kinesis stream.
@@ -116,6 +117,8 @@ func NewKinesis(config Config) (StreamInterface, error) {
 
 		retryCount:    config.RetryCount,
 		retryWaitTime: 100 * time.Millisecond,
+
+		verbose: config.Verbose,
 	}
 
 	if s.logBufferSize == 0 {
