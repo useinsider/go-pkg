@@ -65,6 +65,7 @@ Here's a quick guide on how to get started with the `inskinesis` package:
 | MaxGroup               | 1                  | The maximum number of concurrent groups for sending records. If you want to send records concurrently, set this value to a number greater than 1. |
 | RetryCount             | 3                  | The number of times to retry sending a batch of records to the stream.                                                                            |
 | RetryInterval          | 100 ms             | The interval between retries.                                                                                                                     |
+| Verbose                | false              | Whether to enable verbose logging.                                                                                                                |
 
 Please note that `N/A` in the Default Value column indicates that these fields are required and do not have default
 values.
