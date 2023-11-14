@@ -1,8 +1,10 @@
 package insrequester
 
 import (
-	"github.com/slok/goresilience/errors"
+	"context"
+	"fmt"
 	"github.com/stretchr/testify/assert"
+	"github.com/useinsider/go-pkg/insredis"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,6 +12,18 @@ import (
 )
 
 func TestRequest_Get(t *testing.T) {
+	t.Run("it_should_return_error_when_request_is_nil", func(t *testing.T) {
+		ctx := context.Background()
+		type x string
+
+		var g x
+		g = "val"
+
+		ctx = context.WithValue(ctx, g, "rafet")
+		fmt.Printf("%v", ctx.Value("val"))
+
+	})
+
 	t.Run("it_should_return_response_properly", func(t *testing.T) {
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
@@ -17,7 +31,7 @@ func TestRequest_Get(t *testing.T) {
 		}))
 		defer ts.Close()
 
-		r := NewRequester()
+		r := NewRequester(insredis.Init("localhost:6379", 101))
 
 		res, err := r.Get(RequestEntity{Endpoint: ts.URL})
 		assert.NoError(t, err)
@@ -34,7 +48,7 @@ func TestRequest_Get(t *testing.T) {
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
-		r := NewRequester().WithRetry(RetryConfig{
+		r := NewRequester(insredis.Init("localhost:6379", 101)).WithRetry(RetryConfig{
 			WaitBase: 20 * time.Millisecond,
 			Times:    3,
 		}).Load()
@@ -48,15 +62,20 @@ func TestRequest_Get(t *testing.T) {
 	})
 
 	t.Run("it_should_load_circuit_breaker_properly", func(t *testing.T) {
+		redos := insredis.Init("localhost:6379", 101)
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}))
 		defer ts.Close()
 
-		r := NewRequester().WithCircuitbreaker(CircuitBreakerConfig{
-			MinimumRequestToOpen:         3,
-			SuccessfulRequiredOnHalfOpen: 1,
-			WaitDurationInOpenState:      300 * time.Second,
+		r := NewRequester(redos).
+			SetName(ts.URL).
+			WithCircuitbreaker(CircuitBreakerConfig{
+				MinimumRequestToOpen:         3,
+				SuccessfulRequiredOnHalfOpen: 1,
+				WaitDurationInOpenState:      300 * time.Second,
+			}).OnCircularBreakerOpen(func() {
+			fmt.Println("circuit breaker is open")
 		}).Load()
 
 		minimumRequestToOpen := 3
@@ -66,6 +85,20 @@ func TestRequest_Get(t *testing.T) {
 			_, _ = r.Get(req)
 		}
 		_, err = r.Get(req)
-		assert.ErrorIs(t, err, errors.ErrCircuitOpen)
+		assert.ErrorIs(t, err, ErrCircuitBreakerOpen)
+	})
+
+	//write a case for timeout
+	t.Run("it_should_load_timeout_properly", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(2 * time.Second)
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer ts.Close()
+
+		r := NewRequester(insredis.Init("localhost:6379", 101)).WithTimeout(1).Load()
+		req := RequestEntity{Endpoint: ts.URL}
+		_, err := r.Get(req)
+		assert.ErrorIs(t, err, ErrTimeout)
 	})
 }

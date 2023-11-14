@@ -4,43 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/go-redis/redis"
 	"github.com/slok/goresilience"
-	"github.com/slok/goresilience/circuitbreaker"
 	goresilienceErrors "github.com/slok/goresilience/errors"
-	"github.com/slok/goresilience/retry"
-	"github.com/slok/goresilience/timeout"
+	"github.com/slok/goresilience/metrics"
 	"net/http"
-	"time"
 )
-
-// NewRequester ...
-func NewRequester() Requester {
-	return &Request{}
-}
-
-type CircuitBreakerConfig struct {
-	MinimumRequestToOpen         int
-	SuccessfulRequiredOnHalfOpen int
-	WaitDurationInOpenState      time.Duration
-}
-
-type RetryConfig struct {
-	WaitBase time.Duration
-	Times    int
-}
-
-// Requester represent the package structure, with creating exactly the same interface your own codebase you can
-// easily mock the functions inside this package while writing unit tests.
-type Requester interface {
-	Get(re RequestEntity) (*http.Response, error)
-	Post(re RequestEntity) (*http.Response, error)
-	Put(re RequestEntity) (*http.Response, error)
-	Delete(re RequestEntity) (*http.Response, error)
-	WithRetry(config RetryConfig) *Request
-	WithCircuitbreaker(config CircuitBreakerConfig) *Request
-	WithTimeout(timeoutSeconds int) *Request
-	Load() *Request
-}
 
 // RequestEntity contains required information for sending http request.
 type RequestEntity struct {
@@ -50,9 +19,76 @@ type RequestEntity struct {
 }
 
 type Request struct {
-	timeout     int
-	runner      goresilience.Runner
-	middlewares []goresilience.Middleware
+	name                        string
+	cfg                         RequesterConfig
+	timeout                     int
+	runner                      goresilience.Runner
+	middlewares                 []goresilience.Middleware
+	client                      *http.Client
+	onCircularBreakerOpen       func()
+	onCircularBreakerHalfOpen   func()
+	onCircularBreakerClosed     func()
+	onCircuitBreakerStateChange func(requester *Request, from CBState, to CBState)
+	cbState                     CBState
+	onRetry                     func()
+	onTimeout                   func()
+	consecutiveSuccessesCount   int
+	consecutiveFailuresCount    int
+	totalSuccessesCount         int
+	totalFailuresCount          int
+	totalCount                  int
+	cache                       *redis.Client
+}
+
+type CBState string
+
+const (
+	CBStateOpen     CBState = "open"
+	CBStateHalfOpen CBState = "halfopen"
+	CBStateClosed   CBState = "closed"
+)
+
+// NewRequester ...
+func NewRequester(cache *redis.Client) Requester {
+	return &Request{
+		cache: cache,
+	}
+}
+
+// Requester represent the package structure, with creating exactly the same interface your own codebase you can
+// easily mock the functions inside this package while writing unit tests.
+type Requester interface {
+	SetName(name string) *Request
+	Name() string
+	Configure(cfg RequesterConfig) *Request
+	Get(re RequestEntity) (*http.Response, error)
+	Post(re RequestEntity) (*http.Response, error)
+	Put(re RequestEntity) (*http.Response, error)
+	Delete(re RequestEntity) (*http.Response, error)
+	WithRetry(config RetryConfig) *Request
+	WithCircuitbreaker(config CircuitBreakerConfig) *Request
+	WithTimeout(timeoutSeconds int) *Request
+	OnCircularBreakerOpen(func()) *Request
+	OnCircularBreakerHalfOpen(func()) *Request
+	OnCircularBreakerClosed(func()) *Request
+	OnCircuitBreakerStateChange(func(requester *Request, from CBState, to CBState)) *Request
+	OnRetry(func()) *Request
+	OnTimeout(func()) *Request
+	Load() *Request
+}
+
+func (r *Request) SetName(name string) *Request {
+	r.name = name
+	return r
+}
+
+func (r *Request) Name() string {
+	return r.name
+}
+
+func (r *Request) Configure(cfg RequesterConfig) *Request {
+	r.cfg = cfg
+	return r
 }
 
 // Get sends HTTP get request to the given endpoint and returns *http.Response and an error.
@@ -82,7 +118,7 @@ func (r *Request) sendRequest(httpMethod string, re RequestEntity) (*http.Respon
 	)
 
 	if r.runner == nil {
-		r.runner = goresilience.RunnerChain(r.middlewares...)
+		return nil, fmt.Errorf("requester is not loaded")
 	}
 
 	runnerErr := r.runner.Run(context.TODO(), func(ctx context.Context) error {
@@ -97,9 +133,17 @@ func (r *Request) sendRequest(httpMethod string, re RequestEntity) (*http.Respon
 		req.Close = true
 		re.applyHeadersToRequest(req)
 
-		res, outerErr = (&http.Client{Timeout: time.Duration(r.timeout) * time.Second}).Do(req)
+		res, outerErr = r.client.Do(req)
 		if outerErr != nil {
 			return nil
+		}
+
+		r.totalCount++
+
+		if res.StatusCode >= 500 {
+			r.consecutiveFailuresCount++
+			r.totalFailuresCount++
+			r.consecutiveSuccessesCount = 0
 		}
 
 		if res.StatusCode >= 100 && res.StatusCode < 200 ||
@@ -107,6 +151,10 @@ func (r *Request) sendRequest(httpMethod string, re RequestEntity) (*http.Respon
 			res.StatusCode >= 500 && res.StatusCode <= 599 {
 			return ErrRetryable
 		}
+
+		r.consecutiveSuccessesCount++
+		r.totalSuccessesCount++
+		r.consecutiveFailuresCount = 0
 
 		return nil
 	})
@@ -142,62 +190,27 @@ func (r RequestEntity) applyHeadersToRequest(request *http.Request) {
 	}
 }
 
-func (r *Request) WithRetry(config RetryConfig) *Request {
-	if config.WaitBase == 0 {
-		config.WaitBase = 200 * time.Millisecond
-	}
-
-	if config.Times == 0 {
-		config.Times = 3
-	}
-
-	mw := retry.NewMiddleware(retry.Config{
-		WaitBase: config.WaitBase,
-		Times:    config.Times,
-	})
-	r.middlewares = append(r.middlewares, mw)
-
-	return r
-}
-func (r *Request) WithCircuitbreaker(config CircuitBreakerConfig) *Request {
-	if config.MinimumRequestToOpen == 0 {
-		config.MinimumRequestToOpen = 3
-	}
-
-	if config.SuccessfulRequiredOnHalfOpen == 0 {
-		config.SuccessfulRequiredOnHalfOpen = 1
-	}
-
-	if config.WaitDurationInOpenState == 0 {
-		config.WaitDurationInOpenState = 5 * time.Second
-	}
-
-	mw := circuitbreaker.NewMiddleware(circuitbreaker.Config{
-		MinimumRequestToOpen:         config.MinimumRequestToOpen,
-		SuccessfulRequiredOnHalfOpen: config.SuccessfulRequiredOnHalfOpen,
-		WaitDurationInOpenState:      config.WaitDurationInOpenState,
-	})
-	r.middlewares = append(r.middlewares, mw)
-
-	return r
-}
-
-func (r *Request) WithTimeout(timeoutSeconds int) *Request {
-	if timeoutSeconds == 0 {
-		r.timeout = 30
-	} else {
-		r.timeout = timeoutSeconds
-	}
-
-	mw := timeout.NewMiddleware(timeout.Config{
-		Timeout: time.Duration(r.timeout) * time.Second,
-	})
-	r.middlewares = append(r.middlewares, mw)
-
-	return r
-}
-
 func (r *Request) Load() *Request {
+	metricRecorder := NewRecorder(r)
+	m := metrics.NewMiddleware("insrequester", metricRecorder)
+	newMiddlewares := []goresilience.Middleware{m}
+	r.middlewares = append(newMiddlewares, r.middlewares...)
+
+	var t = http.DefaultTransport.(*http.Transport).Clone()
+	if r.cfg.MaxIdleConns > 0 {
+		t.MaxIdleConns = r.cfg.MaxIdleConns
+	}
+
+	if r.cfg.MaxIdleConnsPerHost > 0 {
+		t.MaxIdleConnsPerHost = r.cfg.MaxIdleConnsPerHost
+	}
+
+	if r.cfg.MaxConnsPerHost > 0 {
+		t.MaxConnsPerHost = r.cfg.MaxConnsPerHost
+	}
+
+	r.client = &http.Client{Transport: t}
 	r.runner = goresilience.RunnerChain(r.middlewares...)
+
 	return r
 }
