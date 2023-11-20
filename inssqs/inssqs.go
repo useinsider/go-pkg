@@ -38,19 +38,12 @@ type Config struct {
 }
 
 func NewSQS(config Config) Interface {
-	envConfig, err := awsconfig.NewEnvConfig()
-	if err != nil {
-		return nil
-	}
-
 	cfg, err := awsconfig.LoadDefaultConfig(context.Background(),
 		awsconfig.WithRegion(config.Region),
-		awsconfig.WithSharedConfigProfile(envConfig.SharedConfigProfile),
 		awsconfig.WithRetryMaxAttempts(config.RetryCount),
-		awsconfig.WithRetryMode(aws.RetryModeAdaptive),
-	)
+		awsconfig.WithRetryMode(aws.RetryModeAdaptive))
 	if err != nil {
-		return nil
+		panic(err)
 	}
 
 	logger := inslogger.NewLogger(inslogger.Info)
