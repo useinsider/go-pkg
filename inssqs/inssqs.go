@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	awssqs "github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/aws/smithy-go/middleware"
@@ -37,10 +38,20 @@ type Config struct {
 }
 
 func NewSQS(config Config) Interface {
-	cfg := aws.NewConfig()
-	cfg.Region = config.Region
-	cfg.RetryMaxAttempts = config.RetryCount
-	cfg.RetryMode = aws.RetryModeAdaptive
+	envConfig, err := awsconfig.NewEnvConfig()
+	if err != nil {
+		return nil
+	}
+
+	cfg, err := awsconfig.LoadDefaultConfig(context.Background(),
+		awsconfig.WithRegion(config.Region),
+		awsconfig.WithSharedConfigProfile(envConfig.SharedConfigProfile),
+		awsconfig.WithRetryMaxAttempts(config.RetryCount),
+		awsconfig.WithRetryMode(aws.RetryModeAdaptive),
+	)
+	if err != nil {
+		return nil
+	}
 
 	logger := inslogger.NewLogger(inslogger.Info)
 	if config.LogLevel != "" {
@@ -48,7 +59,7 @@ func NewSQS(config Config) Interface {
 	}
 
 	q := &queue{
-		client: sqs.NewSQSProxy(awssqs.NewFromConfig(*cfg)),
+		client: sqs.NewSQSProxy(awssqs.NewFromConfig(cfg)),
 		name:   config.QueueName,
 
 		retryCount: config.RetryCount,
@@ -234,7 +245,9 @@ func (q *queue) getQueueUrl() (queueUrl *string, err error) {
 		return q.url, nil
 	}
 
-	res, err := q.client.GetQueueUrl(context.Background(), &awssqs.GetQueueUrlInput{QueueName: aws.String(q.name)})
+	res, err := q.client.GetQueueUrl(context.Background(), &awssqs.GetQueueUrlInput{
+		QueueName: aws.String(q.name),
+	})
 	if err != nil {
 		return nil, err
 	}
