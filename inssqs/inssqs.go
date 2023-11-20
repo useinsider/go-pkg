@@ -25,7 +25,7 @@ type queue struct {
 	retryCount int
 	url        *string
 
-	logger inslogger.AppLogger
+	logger *inslogger.AppLogger
 }
 
 type Config struct {
@@ -56,6 +56,8 @@ func NewSQS(config Config) Interface {
 		name:   config.QueueName,
 
 		retryCount: config.RetryCount,
+
+		logger: logger,
 	}
 
 	qUrl, err := q.getQueueUrl()
