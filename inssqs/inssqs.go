@@ -207,6 +207,7 @@ func (q *queue) sendMessageBatch(entries []SQSMessageEntry, retryCount int) (fai
 		return entries, nil
 	}
 
+	q.logger.Debugf("Batching %d messages to SQS\n", len(entries))
 	batchEntries := make([]types.SendMessageBatchRequestEntry, len(entries))
 	for i, e := range entries {
 		batchEntries[i] = e.toSendMessageBatchRequestEntry()
@@ -217,13 +218,19 @@ func (q *queue) sendMessageBatch(entries []SQSMessageEntry, retryCount int) (fai
 		QueueUrl: q.url,
 	}
 
+	q.logger.Debugf("Sending %d messages to SQS\n", len(entries))
+
 	res, err := q.client.SendMessageBatch(context.Background(), batch)
 	if err != nil {
-		q.logger.Logf("Error sending %d messages to SQS: %v\n", len(entries), err)
+		q.logger.Errorf("Error sending %d messages to SQS: %v\n", len(entries), err)
 		return entries, err
 	}
 
+	q.logger.Debugf("Sent %d messages to SQS\n", len(entries))
+
 	attempts := getRequestAttemptCount(res.ResultMetadata)
+
+	q.logger.Debugf("Attempted %d times to send %d messages to SQS\n", attempts, len(entries))
 
 	if len(res.Failed) == 0 {
 		q.logger.Logf("Successfully sent %d messages to SQS after %d attempts\n", len(entries), attempts)
@@ -232,6 +239,7 @@ func (q *queue) sendMessageBatch(entries []SQSMessageEntry, retryCount int) (fai
 	}
 
 	failedEntries := getFailedEntries(entries, res.Failed)
+
 	q.logger.Logf("Failed to send %d messages to SQS after %d attempts\n", len(failedEntries), attempts)
 
 	return q.sendMessageBatch(failedEntries, retryCount-1)
