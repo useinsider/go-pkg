@@ -11,6 +11,7 @@ import (
 	"github.com/useinsider/go-pkg/inslogger"
 	"github.com/useinsider/go-pkg/insparallel"
 	"github.com/useinsider/go-pkg/inssqs/sqs"
+	"sync"
 )
 
 type Interface interface {
@@ -100,30 +101,31 @@ func (q *queue) DeleteMessageBatch(entries []SQSDeleteMessageEntry) (failed []SQ
 }
 
 func (q *queue) sendBatchesConcurrently(batches [][]SQSMessageEntry) ([]SQSMessageEntry, error) {
-	wrkGrp := insparallel.NewWorkGroup[[]SQSMessageEntry, []SQSMessageEntry](5)
-
-	for _, batch := range batches {
-		b := batch
-		wrkGrp.Add(func([]SQSMessageEntry) ([]SQSMessageEntry, error) {
-			return q.sendMessageBatch(b, q.retryCount+1)
-		}, b)
-	}
-
-	wrkGrp.Run()
-	wrkGrp.Wait()
+	concurrentLimiter := make(chan struct{}, 5)
+	wg := sync.WaitGroup{}
 
 	var failedRecords []SQSMessageEntry
-	var err error
-	for _, work := range wrkGrp.Works {
-		if work.Err != nil {
-			err = work.Err
-			q.logger.Logf("Error sending %d messages to SQS: %v\n", len(work.Params), work.Err)
-		}
 
-		if work.RetVal != nil {
-			failedRecords = append(failedRecords, work.RetVal...)
-		}
+	var failed []SQSMessageEntry
+	var err error
+	for _, batch := range batches {
+		b := batch
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+			concurrentLimiter <- struct{}{}
+			defer func() { <-concurrentLimiter }()
+			failed, err = q.sendMessageBatch(b, q.retryCount+1)
+			if err != nil {
+				q.logger.Errorf("Error sending %d messages to SQS: %v\n", len(b), err)
+			}
+
+			failedRecords = append(failedRecords, failed...)
+		}()
 	}
+
+	wg.Wait()
 
 	return failedRecords, err
 }
