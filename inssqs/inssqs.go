@@ -2,13 +2,13 @@ package inssqs
 
 import (
 	"context"
-	"errors"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	awssqs "github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/aws/smithy-go/middleware"
+	"github.com/pkg/errors"
 	"github.com/useinsider/go-pkg/inslogger"
 	"github.com/useinsider/go-pkg/inssqs/sqs"
 	"sync"
@@ -20,11 +20,12 @@ type Interface interface {
 }
 
 type queue struct {
-	client sqs.API
+	client   sqs.API
+	name     string
+	url      *string
+	endpoint string
 
-	name       string
 	retryCount int
-	url        *string
 
 	maxBatchSize      int
 	maxBatchSizeBytes int
@@ -42,15 +43,32 @@ type Config struct {
 	MaxBatchSizeBytes int    // Maximum size of a message batch in bytes.
 	MaxWorkers        int    // Maximum number of workers for concurrent operations.
 	LogLevel          string // Log level for SQS operations.
+
+	EndpointUrl string // Endpoint URL for AWS operations.
 }
 
 func NewSQS(config Config) Interface {
+	if config.Region == "" {
+		panic(ErrRegionNotSet)
+	}
+
+	if config.QueueName == "" {
+		panic(ErrQueueNameNotSet)
+	}
+
+	config.setDefaults()
+
 	cfg, err := awsconfig.LoadDefaultConfig(context.Background(),
 		awsconfig.WithRegion(config.Region),
 		awsconfig.WithRetryMaxAttempts(config.RetryCount),
 		awsconfig.WithRetryMode(aws.RetryModeAdaptive))
 	if err != nil {
-		panic(err)
+		panic(errors.Wrap(err, "error while loading aws sqs config"))
+	}
+
+	// set endpoint url if provided
+	if config.EndpointUrl != "" {
+		cfg.BaseEndpoint = aws.String(config.EndpointUrl)
 	}
 
 	var logger *inslogger.AppLogger
@@ -72,12 +90,30 @@ func NewSQS(config Config) Interface {
 
 	qUrl, err := q.getQueueUrl()
 	if err != nil {
-		panic(err)
+		panic(errors.Wrap(err, "error while getting queue url"))
 	}
 
 	q.url = qUrl
 
 	return q
+}
+
+func (c *Config) setDefaults() {
+	if c.MaxBatchSize == 0 {
+		c.MaxBatchSize = 10
+	}
+
+	if c.MaxBatchSizeBytes == 0 {
+		c.MaxBatchSizeBytes = 64 * 1024
+	}
+
+	if c.MaxWorkers == 0 {
+		c.MaxWorkers = 1
+	}
+
+	if c.RetryCount == 0 {
+		c.RetryCount = 3
+	}
 }
 
 // SendMessageBatch sends a batch of messages to an SQS queue, handling retries and respecting batch size constraints.
@@ -175,7 +211,7 @@ func (q *queue) deleteMessageBatch(entries []SQSDeleteMessageEntry, retryCount i
 	}
 
 	if retryCount == 0 {
-		return entries, nil
+		return entries, ErrRetryCountExceeded
 	}
 
 	batchEntries := make([]types.DeleteMessageBatchRequestEntry, len(entries))
@@ -191,7 +227,7 @@ func (q *queue) deleteMessageBatch(entries []SQSDeleteMessageEntry, retryCount i
 	res, err := q.client.DeleteMessageBatch(context.Background(), batch)
 	if err != nil {
 		q.logger.Errorf("Error sending %d messages to SQS: %v\n", len(entries), err)
-		return entries, err
+		return q.deleteMessageBatch(entries, retryCount-1)
 	}
 
 	attempts := getRequestAttemptCount(res.ResultMetadata)
@@ -222,7 +258,7 @@ func (q *queue) sendMessageBatch(entries []SQSMessageEntry, retryCount int) (fai
 	}
 
 	if retryCount == 0 {
-		return entries, errors.New("max retry count reached")
+		return entries, ErrRetryCountExceeded
 	}
 
 	batchEntries := make([]types.SendMessageBatchRequestEntry, len(entries))
@@ -237,6 +273,7 @@ func (q *queue) sendMessageBatch(entries []SQSMessageEntry, retryCount int) (fai
 
 	res, err := q.client.SendMessageBatch(context.Background(), batch)
 	if err != nil {
+		q.logger.Errorf("Error sending %d messages to SQS: %v\n", len(entries), err)
 		return q.sendMessageBatch(entries, retryCount-1)
 	}
 
