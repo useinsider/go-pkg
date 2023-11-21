@@ -61,11 +61,13 @@ func NewSQS(config Config) Interface {
 	}
 
 	q := &queue{
-		client:     sqs.NewSQSProxy(awssqs.NewFromConfig(cfg)),
-		name:       config.QueueName,
-		retryCount: config.RetryCount,
-		workers:    config.MaxWorkers,
-		logger:     logger,
+		client:            sqs.NewSQSProxy(awssqs.NewFromConfig(cfg)),
+		name:              config.QueueName,
+		retryCount:        config.RetryCount,
+		workers:           config.MaxWorkers,
+		logger:            logger,
+		maxBatchSize:      config.MaxBatchSize,
+		maxBatchSizeBytes: config.MaxBatchSizeBytes,
 	}
 
 	qUrl, err := q.getQueueUrl()
