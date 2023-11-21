@@ -2,6 +2,7 @@ package inssqs
 
 import (
 	"context"
+	"errors"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -135,9 +136,6 @@ func (q *queue) DeleteMessageBatch(entries []SQSDeleteMessageEntry) (failed []SQ
 // - err: An error indicating any failure during the concurrent sending process, nil if all operations succeeded.
 func (q *queue) sendBatchesConcurrently(batches [][]SQSMessageEntry) ([]SQSMessageEntry, error) {
 	failedEntries, err := doConcurrently(batches, q.workers, q.retryCount, q.sendMessageBatch)
-	if err != nil {
-		return nil, err
-	}
 
 	return failedEntries, err
 }
@@ -222,7 +220,7 @@ func (q *queue) sendMessageBatch(entries []SQSMessageEntry, retryCount int) (fai
 	}
 
 	if retryCount == 0 {
-		return entries, nil
+		return entries, errors.New("max retry count reached")
 	}
 
 	batchEntries := make([]types.SendMessageBatchRequestEntry, len(entries))
@@ -237,7 +235,7 @@ func (q *queue) sendMessageBatch(entries []SQSMessageEntry, retryCount int) (fai
 
 	res, err := q.client.SendMessageBatch(context.Background(), batch)
 	if err != nil {
-		return entries, err
+		return q.sendMessageBatch(entries, retryCount-1)
 	}
 
 	attempts := getRequestAttemptCount(res.ResultMetadata)
@@ -335,37 +333,35 @@ func doConcurrently[T any](batches [][]T, workers int, retryCount int, f func([]
 
 	concurrentLimiter := make(chan struct{}, workers)
 	wg := sync.WaitGroup{}
-
-	failedEntriesChan := make(chan T, 1000)
-	failedEntries := make([]T, 0)
-
+	var mu sync.Mutex
 	var outerErr error
-	for _, batch := range batches {
-		b := batch
-		wg.Add(1)
+	failedEntriesChan := make(chan []T)
 
-		go func() {
+	for _, batch := range batches {
+		wg.Add(1)
+		go func(b []T) {
 			defer wg.Done()
 			concurrentLimiter <- struct{}{}
 			defer func() { <-concurrentLimiter }()
-			failedEntries, err := f(b, retryCount+1)
+			fe, err := f(b, retryCount+1)
 			if err != nil {
-				outerErr = err
+				mu.Lock()
+				outerErr = err // Set the error, but this doesn't stop other batches from processing.
+				mu.Unlock()
 			}
-
-			for _, e := range failedEntries {
-				failedEntriesChan <- e
-			}
-		}()
+			failedEntriesChan <- fe
+		}(batch)
 	}
 
-	wg.Wait()
+	go func() {
+		wg.Wait()
+		close(failedEntriesChan)
+	}()
 
-	for i := range failedEntriesChan {
-		failedEntries = append(failedEntries, i)
+	var failedEntries []T
+	for failedBatch := range failedEntriesChan {
+		failedEntries = append(failedEntries, failedBatch...)
 	}
-
-	close(failedEntriesChan)
 
 	return failedEntries, outerErr
 }

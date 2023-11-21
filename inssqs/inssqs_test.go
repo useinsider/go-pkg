@@ -50,7 +50,7 @@ func TestQueue_SendMessageBatch(t *testing.T) {
 			{Id: aws.String("test-id")},
 		})
 
-		assert.Nil(t, err, "err should be nil")
+		assert.NotNil(t, err, "err should not be nil")
 		assert.NotNil(t, failed, "failed should not be nil")
 		assert.Equal(t, failed[0].Id, aws.String("test-id"), "failed id should be equal to test-id")
 	})
@@ -60,8 +60,11 @@ func TestQueue_SendMessageBatch(t *testing.T) {
 
 		client.EXPECT().
 			SendMessageBatch(gomock.Any(), gomock.Any(), gomock.Any()).
-			Return(nil, assert.AnError).
-			Times(1)
+			Return(&awssqs.SendMessageBatchOutput{
+				Failed: []types.BatchResultErrorEntry{
+					{Id: aws.String("test-id")},
+				}}, assert.AnError).
+			Times(4)
 
 		failed, err := q.SendMessageBatch([]SQSMessageEntry{
 			{Id: aws.String("test-id")},
@@ -183,6 +186,6 @@ func newQueue(t *testing.T) (queue, *sqs.MockAPI) {
 		client:     client,
 		name:       "test-queue",
 		retryCount: 3,
-		logger:     *(inslogger.NewLogger(inslogger.Debug)),
+		logger:     inslogger.NewLogger(inslogger.Debug),
 	}, client
 }
