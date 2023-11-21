@@ -53,6 +53,13 @@ func NewLogger(level LogLevel) *AppLogger {
 	return al
 }
 
+func NewNopLogger() *AppLogger {
+	return &AppLogger{
+		Logger: zap.NewNop(),
+		Sugar:  zap.NewNop().Sugar(),
+	}
+}
+
 func (al *AppLogger) LogMultiple(errs []error) {
 	for _, err := range errs {
 		al.Sugar.Infof("%v+", err)
@@ -106,14 +113,17 @@ func (al *AppLogger) initLogger() error {
 		err       error
 	)
 
-	newLogger = zap.NewNop()
-
+	newLogger, err = zap.NewProduction()
 	if err != nil {
 		return err
 	}
 
 	switch al.Level {
 	case Debug:
+		newLogger, err = zap.NewDevelopment()
+		if err != nil {
+			return err
+		}
 		newLogger = newLogger.WithOptions(zap.IncreaseLevel(zap.DebugLevel))
 	case Info:
 		newLogger = newLogger.WithOptions(zap.IncreaseLevel(zap.InfoLevel))

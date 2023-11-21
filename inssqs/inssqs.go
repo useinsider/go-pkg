@@ -2,7 +2,6 @@ package inssqs
 
 import (
 	"context"
-	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -10,7 +9,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/aws/smithy-go/middleware"
 	"github.com/useinsider/go-pkg/inslogger"
-	"github.com/useinsider/go-pkg/insparallel"
 	"github.com/useinsider/go-pkg/inssqs/sqs"
 	"sync"
 )
@@ -27,16 +25,22 @@ type queue struct {
 	retryCount int
 	url        *string
 
+	maxBatchSize      int
+	maxBatchSizeBytes int
+	workers           int
+
 	logger *inslogger.AppLogger
 }
 
+// Config represents the configuration settings required for initializing an SQS queue.
 type Config struct {
-	Region    string
-	QueueName string
-
-	RetryCount int
-
-	LogLevel string
+	Region            string // AWS region where the SQS queue resides.
+	QueueName         string // Name of the SQS queue.
+	RetryCount        int    // Number of retry attempts allowed for queue operations.
+	MaxBatchSize      int    // Maximum size of a message batch.
+	MaxBatchSizeBytes int    // Maximum size of a message batch in bytes.
+	MaxWorkers        int    // Maximum number of workers for concurrent operations.
+	LogLevel          string // Log level for SQS operations.
 }
 
 func NewSQS(config Config) Interface {
@@ -48,18 +52,19 @@ func NewSQS(config Config) Interface {
 		panic(err)
 	}
 
-	logger := inslogger.NewLogger(inslogger.Info)
-	if config.LogLevel != "" {
-		logger.SetLevel(inslogger.LogLevel(config.LogLevel))
+	var logger *inslogger.AppLogger
+	if config.LogLevel == "" {
+		logger = inslogger.NewNopLogger()
+	} else {
+		logger = inslogger.NewLogger(inslogger.LogLevel(config.LogLevel))
 	}
 
 	q := &queue{
-		client: sqs.NewSQSProxy(awssqs.NewFromConfig(cfg)),
-		name:   config.QueueName,
-
+		client:     sqs.NewSQSProxy(awssqs.NewFromConfig(cfg)),
+		name:       config.QueueName,
 		retryCount: config.RetryCount,
-
-		logger: logger,
+		workers:    config.MaxWorkers,
+		logger:     logger,
 	}
 
 	qUrl, err := q.getQueueUrl()
@@ -71,95 +76,99 @@ func NewSQS(config Config) Interface {
 
 	return q
 }
+
+// SendMessageBatch sends a batch of messages to an SQS queue, handling retries and respecting batch size constraints.
+//
+// Parameters:
+// - entries: A slice of SQSMessageEntry representing messages to be sent in batches to the SQS queue.
+//
+// Returns:
+// - failedEntries: A slice of SQSMessageEntry containing the messages that failed to be sent after all attempts.
+// - err: An error indicating any failure during the sending process, nil if all messages were sent successfully.
 func (q *queue) SendMessageBatch(entries []SQSMessageEntry) ([]SQSMessageEntry, error) {
-	batches, err := createBatches(entries, 10, 256*1024*1024)
+	batches, err := createBatches(entries, q.maxBatchSize, q.maxBatchSizeBytes)
 	if err != nil {
 		return entries, err
 	}
 
-	failedRecords, err := q.sendBatchesConcurrently(batches)
+	failedEntries, err := q.sendBatchesConcurrently(batches)
 	if err != nil {
-		fmt.Printf("Error sending %d messages to SQS: %v\n", len(failedRecords), err)
-		return failedRecords, err
+		q.logger.Errorf("Error sending %d messages to SQS: %v\n", len(failedEntries), err)
+		return failedEntries, err
 	}
 
-	return failedRecords, nil
+	return failedEntries, nil
 }
 
+// DeleteMessageBatch attempts to delete a batch of messages from an SQS queue using the provided entries,
+// handling retries on failure and respecting the specified retry count.
+//
+// Parameters:
+// - entries: A slice of SQSDeleteMessageEntry representing messages to be deleted in batches from the SQS queue.
+//
+// Returns:
+// - failedEntries: A slice of SQSDeleteMessageEntry containing the messages that failed to be deleted after all attempts.
+// - err: An error indicating any failure during the deletion process, nil if all messages were deleted successfully.
 func (q *queue) DeleteMessageBatch(entries []SQSDeleteMessageEntry) (failed []SQSDeleteMessageEntry, err error) {
-	batches, err := createBatches(entries, 10, 256*1024*1024)
+	batches, err := createBatches(entries, q.maxBatchSize, q.maxBatchSizeBytes)
 	if err != nil {
 		return entries, err
 	}
 
-	failedRecords, err := q.deleteBatchesConcurrently(batches)
+	failedEntries, err := q.deleteBatchesConcurrently(batches)
 	if err != nil {
-		fmt.Printf("Error deleting %d messages from SQS: %v\n", len(failedRecords), err)
-		return failedRecords, err
+		q.logger.Errorf("Error deleting %d messages from SQS: %v\n", len(failedEntries), err)
+		return failedEntries, err
 	}
 
-	return failedRecords, nil
+	return failedEntries, nil
 }
 
+// sendBatchesConcurrently concurrently processes multiple batches of send operations
+// on an SQS queue using a specified number of workers and retry logic.
+//
+// Parameters:
+// - batches: A slice of slices, each containing SQSMessageEntry representing send operations in batches.
+//
+// Returns:
+// - failedEntries: A slice of SQSMessageEntry containing the failed send operations across all batches.
+// - err: An error indicating any failure during the concurrent sending process, nil if all operations succeeded.
 func (q *queue) sendBatchesConcurrently(batches [][]SQSMessageEntry) ([]SQSMessageEntry, error) {
-	concurrentLimiter := make(chan struct{}, 5)
-	wg := sync.WaitGroup{}
-
-	var failedRecords []SQSMessageEntry
-
-	var failed []SQSMessageEntry
-	var err error
-	for _, batch := range batches {
-		b := batch
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-			concurrentLimiter <- struct{}{}
-			defer func() { <-concurrentLimiter }()
-			failed, err = q.sendMessageBatch(b, q.retryCount+1)
-			if err != nil {
-				fmt.Printf("Error sending %d messages to SQS: %v\n", len(b), err)
-			}
-
-			failedRecords = append(failedRecords, failed...)
-		}()
+	failedEntries, err := doConcurrently(batches, q.workers, q.retryCount, q.sendMessageBatch)
+	if err != nil {
+		return nil, err
 	}
 
-	wg.Wait()
-
-	return failedRecords, err
+	return failedEntries, err
 }
 
+// deleteBatchesConcurrently concurrently processes multiple batches of delete operations
+// on an SQS queue using a specified number of workers and retry logic.
+//
+// Parameters:
+// - batches: A slice of slices, each containing SQSDeleteMessageEntry representing delete operations in batches.
+//
+// Returns:
+// - failedEntries: A slice of SQSDeleteMessageEntry containing the failed delete operations across all batches.
+// - err: An error indicating any failure during the concurrent deletion process, nil if all operations succeeded.
 func (q *queue) deleteBatchesConcurrently(batches [][]SQSDeleteMessageEntry) ([]SQSDeleteMessageEntry, error) {
-	wrkGrp := insparallel.NewWorkGroup[[]SQSDeleteMessageEntry, []SQSDeleteMessageEntry](5)
-
-	for _, batch := range batches {
-		b := batch
-		wrkGrp.Add(func([]SQSDeleteMessageEntry) ([]SQSDeleteMessageEntry, error) {
-			return q.deleteMessageBatch(b, q.retryCount+1)
-		}, b)
+	failedEntries, err := doConcurrently(batches, q.workers, q.retryCount, q.deleteMessageBatch)
+	if err != nil {
+		return nil, err
 	}
 
-	wrkGrp.Run()
-	wrkGrp.Wait()
-
-	var failedRecords []SQSDeleteMessageEntry
-	var err error
-	for _, work := range wrkGrp.Works {
-		if work.Err != nil {
-			err = work.Err
-			fmt.Printf("Error deleting %d messages from SQS: %v\n", len(work.Params), work.Err)
-		}
-
-		if work.RetVal != nil {
-			failedRecords = append(failedRecords, work.RetVal...)
-		}
-	}
-
-	return failedRecords, err
+	return failedEntries, err
 }
 
+// deleteMessageBatch attempts to delete a batch of messages from an SQS queue, handling retries on failure.
+//
+// Parameters:
+// - entries: A slice of SQSDeleteMessageEntry representing messages to be deleted in batches from the SQS queue.
+// - retryCount: An integer indicating the number of retry attempts allowed for deleting the messages.
+//
+// Returns:
+// - failedEntries: A slice of SQSDeleteMessageEntry containing the messages that failed to be deleted after all attempts.
+// - err: An error indicating any failure during the deletion process, nil if all messages were deleted successfully.
 func (q *queue) deleteMessageBatch(entries []SQSDeleteMessageEntry, retryCount int) ([]SQSDeleteMessageEntry, error) {
 	if len(entries) == 0 {
 		return nil, nil
@@ -181,24 +190,32 @@ func (q *queue) deleteMessageBatch(entries []SQSDeleteMessageEntry, retryCount i
 
 	res, err := q.client.DeleteMessageBatch(context.Background(), batch)
 	if err != nil {
-		fmt.Printf("Error sending %d messages to SQS: %v\n", len(entries), err)
+		q.logger.Errorf("Error sending %d messages to SQS: %v\n", len(entries), err)
 		return entries, err
 	}
 
 	attempts := getRequestAttemptCount(res.ResultMetadata)
 
 	if len(res.Failed) == 0 {
-		fmt.Printf("Successfully sent %d messages to SQS after %d attempts\n", len(entries), attempts)
+		q.logger.Logf("Successfully sent %d messages to SQS after %d attempts\n", len(entries), attempts)
 
 		return nil, nil
 	}
 
 	failedEntries := getFailedEntries(entries, res.Failed)
-	fmt.Printf("Failed to send %d messages to SQS after %d attempts\n", len(failedEntries), attempts)
+	q.logger.Logf("Failed to send %d messages to SQS after %d attempts\n", len(failedEntries), attempts)
 
 	return q.deleteMessageBatch(failedEntries, retryCount-1)
 }
 
+// sendMessageBatch sends a batch of SQS messages in multiple attempts based on batch size and size constraints.
+//
+// Parameters:
+// - entries: A slice of SQSMessageEntry representing messages to be sent in batches to the SQS queue.
+//
+// Returns:
+// - failedEntries: A slice of SQSMessageEntry containing the messages that failed to be sent after all attempts.
+// - err: An error indicating any failure during the sending process, nil if all messages were sent successfully.
 func (q *queue) sendMessageBatch(entries []SQSMessageEntry, retryCount int) (failed []SQSMessageEntry, err error) {
 	if len(entries) == 0 {
 		return nil, nil
@@ -208,7 +225,6 @@ func (q *queue) sendMessageBatch(entries []SQSMessageEntry, retryCount int) (fai
 		return entries, nil
 	}
 
-	fmt.Printf("Batching %d messages to SQS\n", len(entries))
 	batchEntries := make([]types.SendMessageBatchRequestEntry, len(entries))
 	for i, e := range entries {
 		batchEntries[i] = e.toSendMessageBatchRequestEntry()
@@ -219,33 +235,30 @@ func (q *queue) sendMessageBatch(entries []SQSMessageEntry, retryCount int) (fai
 		QueueUrl: q.url,
 	}
 
-	fmt.Printf("Sending %d messages to SQS\n", len(entries))
-
 	res, err := q.client.SendMessageBatch(context.Background(), batch)
 	if err != nil {
-		fmt.Printf("Error sending %d messages to SQS: %v\n", len(entries), err)
 		return entries, err
 	}
 
-	fmt.Printf("Sent %d messages to SQS\n", len(entries))
-
 	attempts := getRequestAttemptCount(res.ResultMetadata)
 
-	fmt.Printf("Attempted %d times to send %d messages to SQS\n", attempts, len(entries))
-
 	if len(res.Failed) == 0 {
-		fmt.Printf("Successfully sent %d messages to SQS after %d attempts\n", len(entries), attempts)
-
+		q.logger.Logf("Sent %d messages to SQS after %d attempts\n", len(entries), attempts)
 		return nil, nil
 	}
 
 	failedEntries := getFailedEntries(entries, res.Failed)
 
-	fmt.Printf("Failed to send %d messages to SQS after %d attempts\n", len(failedEntries), attempts)
-
 	return q.sendMessageBatch(failedEntries, retryCount-1)
 }
 
+// getQueueUrl retrieves the URL of an SQS queue based on its name using the provided SQS client.
+//
+// This function fetches the queue URL if it's not already cached within the 'queue' instance.
+//
+// Returns:
+// - queueUrl: A pointer to a string containing the URL of the SQS queue.
+// - err: An error if fetching the queue URL fails, nil otherwise.
 func (q *queue) getQueueUrl() (queueUrl *string, err error) {
 	if q.url != nil {
 		return q.url, nil
@@ -263,6 +276,8 @@ func (q *queue) getQueueUrl() (queueUrl *string, err error) {
 	return res.QueueUrl, nil
 }
 
+// getFailedEntries retrieves failed elements by matching their IDs from a collection.
+// Returns a slice of elements corresponding to the failed IDs, maintaining the original order.
 func getFailedEntries[T entry](entries []T, failed []types.BatchResultErrorEntry) []T {
 	failedEntries := make([]T, len(failed))
 	for i, f := range failed {
@@ -276,6 +291,8 @@ func getFailedEntries[T entry](entries []T, failed []types.BatchResultErrorEntry
 	return failedEntries
 }
 
+// getRequestAttemptCount retrieves the number of attempts from AWS SDK request metadata.
+// Returns the attempt counts or -1 if not found.
 func getRequestAttemptCount(metadata middleware.Metadata) int {
 	attempts, ok := retry.GetAttemptResults(metadata)
 	if !ok {
@@ -283,4 +300,72 @@ func getRequestAttemptCount(metadata middleware.Metadata) int {
 	}
 
 	return len(attempts.Results)
+}
+
+// doConcurrently executes a function concurrently across multiple batches of elements of type T,
+// managing parallel processing with specified worker count and retry logic.
+//
+// Parameters:
+//   - batches: A slice of slices, each containing elements of type T. Represents the batches
+//     of operations to be processed concurrently.
+//   - workers: An integer defining the maximum number of goroutines (workers) allowed to run
+//     simultaneously for executing the provided function.
+//   - retryCount: An integer indicating the number of retry attempts permitted for each batch operation.
+//   - f: A function that processes a single batch of elements of type T, given a retry count.
+//     It takes two parameters:
+//   - A slice of elements of type T to be processed.
+//   - An integer representing the retry count for the operation.
+//     It returns two values:
+//   - A slice of elements of type T that failed during processing.
+//   - An error indicating any error occurred during the processing.
+//
+// Returns:
+//   - failedEntries: A slice containing all the failed entries encountered during the concurrent operations
+//     across all batches.
+//   - outerErr: An error variable that holds any errors encountered during the concurrent execution.
+//     It remains nil if no errors occurred during the execution.
+func doConcurrently[T any](batches [][]T, workers int, retryCount int, f func([]T, int) ([]T, error)) ([]T, error) {
+	if len(batches) == 0 {
+		return nil, nil
+	}
+
+	if workers == 0 {
+		workers = 1
+	}
+
+	concurrentLimiter := make(chan struct{}, workers)
+	wg := sync.WaitGroup{}
+
+	failedEntriesChan := make(chan T, 1000)
+	failedEntries := make([]T, 0)
+
+	var outerErr error
+	for _, batch := range batches {
+		b := batch
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+			concurrentLimiter <- struct{}{}
+			defer func() { <-concurrentLimiter }()
+			failedEntries, err := f(b, retryCount+1)
+			if err != nil {
+				outerErr = err
+			}
+
+			for _, e := range failedEntries {
+				failedEntriesChan <- e
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	for i := range failedEntriesChan {
+		failedEntries = append(failedEntries, i)
+	}
+
+	close(failedEntriesChan)
+
+	return failedEntries, outerErr
 }
