@@ -33,3 +33,12 @@ func CreateBatches[T any](v []T, recordLimit int, byteLimit int) ([][]T, error) 
 
 	return batches, nil
 }
+
+func Contains[T comparable](v []T, e T) bool {
+	for _, a := range v {
+		if a == e {
+			return true
+		}
+	}
+	return false
+}

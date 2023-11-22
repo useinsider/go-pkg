@@ -131,6 +131,7 @@ func (c *Config) setDefaults() {
 // When multiple concurrent calls reach the maximum workers, the total worker count might exceed expectations.
 // Consider this while designing applications for optimal performance.
 func (q *queue) SendMessageBatch(entries []SQSMessageEntry) ([]SQSMessageEntry, error) {
+	// TODO: make concurrency as optional.
 	batches, err := insdash.CreateBatches(entries, q.maxBatchSize, q.maxBatchSizeBytes)
 	if err != nil {
 		return entries, err
@@ -159,6 +160,7 @@ func (q *queue) SendMessageBatch(entries []SQSMessageEntry) ([]SQSMessageEntry, 
 // When multiple concurrent calls reach the maximum workers, the total worker count might exceed expectations.
 // Consider this while designing applications for optimal performance.
 func (q *queue) DeleteMessageBatch(entries []SQSDeleteMessageEntry) (failed []SQSDeleteMessageEntry, err error) {
+	// TODO: make concurrency as optional.
 	batches, err := insdash.CreateBatches(entries, q.maxBatchSize, q.maxBatchSizeBytes)
 	if err != nil {
 		return entries, err
