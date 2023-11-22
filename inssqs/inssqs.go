@@ -125,6 +125,11 @@ func (c *Config) setDefaults() {
 // Returns:
 // - failedEntries: A slice of SQSMessageEntry containing the messages that failed to be sent after all attempts.
 // - err: An error indicating any failure during the sending process, nil if all messages were sent successfully.
+//
+// Note:
+// SendMessageBatch operation has an inherent concurrency limit.
+// When multiple concurrent calls reach the maximum workers, the total worker count might exceed expectations.
+// Consider this while designing applications for optimal performance.
 func (q *queue) SendMessageBatch(entries []SQSMessageEntry) ([]SQSMessageEntry, error) {
 	batches, err := insdash.CreateBatches(entries, q.maxBatchSize, q.maxBatchSizeBytes)
 	if err != nil {
@@ -149,6 +154,10 @@ func (q *queue) SendMessageBatch(entries []SQSMessageEntry) ([]SQSMessageEntry, 
 // Returns:
 // - failedEntries: A slice of SQSDeleteMessageEntry containing the messages that failed to be deleted after all attempts.
 // - err: An error indicating any failure during the deletion process, nil if all messages were deleted successfully.
+//
+// DeleteMessageBatch operation has an inherent concurrency limit.
+// When multiple concurrent calls reach the maximum workers, the total worker count might exceed expectations.
+// Consider this while designing applications for optimal performance.
 func (q *queue) DeleteMessageBatch(entries []SQSDeleteMessageEntry) (failed []SQSDeleteMessageEntry, err error) {
 	batches, err := insdash.CreateBatches(entries, q.maxBatchSize, q.maxBatchSizeBytes)
 	if err != nil {
