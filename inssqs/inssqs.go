@@ -366,10 +366,6 @@ func doConcurrently[T any](batches [][]T, workers int, retryCount int, f func([]
 		return nil, nil
 	}
 
-	if workers == 0 {
-		workers = 1
-	}
-
 	concurrentLimiter := make(chan struct{}, workers)
 	wg := sync.WaitGroup{}
 	var mu sync.Mutex
@@ -385,7 +381,7 @@ func doConcurrently[T any](batches [][]T, workers int, retryCount int, f func([]
 			fe, err := f(b, retryCount+1)
 			if err != nil {
 				mu.Lock()
-				outerErr = err // Set the error, but this doesn't stop other batches from processing.
+				outerErr = err
 				mu.Unlock()
 			}
 			failedEntriesChan <- fe
