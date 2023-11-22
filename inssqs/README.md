@@ -51,11 +51,11 @@ if err != nil {
 Delete a batch of messages from an SQS queue using `DeleteMessageBatch()`
 
 ```go
-messages := []inssqs.SQSMessageEntry{
+messages := []inssqs.SQSDeleteMessageEntry{
     // Create SQS message entries here
 }
 
-failedMessages, err := sqs.SendMessageBatch(messages)
+failedMessages, err := sqs.DeleteMessageBatch(messages)
 if err != nil {
     // Handle error
 }
