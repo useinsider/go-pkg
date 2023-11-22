@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/aws/smithy-go/middleware"
 	"github.com/pkg/errors"
+	"github.com/useinsider/go-pkg/insdash"
 	"github.com/useinsider/go-pkg/inslogger"
 	"github.com/useinsider/go-pkg/inssqs/sqs"
 	"sync"
@@ -125,7 +126,7 @@ func (c *Config) setDefaults() {
 // - failedEntries: A slice of SQSMessageEntry containing the messages that failed to be sent after all attempts.
 // - err: An error indicating any failure during the sending process, nil if all messages were sent successfully.
 func (q *queue) SendMessageBatch(entries []SQSMessageEntry) ([]SQSMessageEntry, error) {
-	batches, err := createBatches(entries, q.maxBatchSize, q.maxBatchSizeBytes)
+	batches, err := insdash.CreateBatches(entries, q.maxBatchSize, q.maxBatchSizeBytes)
 	if err != nil {
 		return entries, err
 	}
@@ -149,7 +150,7 @@ func (q *queue) SendMessageBatch(entries []SQSMessageEntry) ([]SQSMessageEntry, 
 // - failedEntries: A slice of SQSDeleteMessageEntry containing the messages that failed to be deleted after all attempts.
 // - err: An error indicating any failure during the deletion process, nil if all messages were deleted successfully.
 func (q *queue) DeleteMessageBatch(entries []SQSDeleteMessageEntry) (failed []SQSDeleteMessageEntry, err error) {
-	batches, err := createBatches(entries, q.maxBatchSize, q.maxBatchSizeBytes)
+	batches, err := insdash.CreateBatches(entries, q.maxBatchSize, q.maxBatchSizeBytes)
 	if err != nil {
 		return entries, err
 	}
@@ -368,7 +369,6 @@ func doConcurrently[T any](batches [][]T, workers int, retryCount int, f func([]
 
 	concurrentLimiter := make(chan struct{}, workers)
 	wg := sync.WaitGroup{}
-	var mu sync.Mutex
 	var outerErr error
 	failedEntriesChan := make(chan []T)
 
@@ -380,9 +380,7 @@ func doConcurrently[T any](batches [][]T, workers int, retryCount int, f func([]
 			defer func() { <-concurrentLimiter }()
 			fe, err := f(b, retryCount+1)
 			if err != nil {
-				mu.Lock()
 				outerErr = err
-				mu.Unlock()
 			}
 			failedEntriesChan <- fe
 		}(batch)

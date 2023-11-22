@@ -1,10 +1,8 @@
-package inssqs
+package insdash
 
-import (
-	"encoding/json"
-)
+import "encoding/json"
 
-func createBatches[T any](v []T, recordLimit int, byteLimit int) ([][]T, error) {
+func CreateBatches[T any](v []T, recordLimit int, byteLimit int) ([][]T, error) {
 	batches := make([][]T, 0)
 	buffer := make([]T, 0)
 	bufferSize := 0
