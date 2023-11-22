@@ -1,11 +1,25 @@
 package inslogger
 
 import (
-	"github.com/getsentry/sentry-go"
 	"go.uber.org/zap"
 	"log"
 )
 
+type Interface interface {
+	LogMultiple(errs []error)
+	Log(i interface{})
+	Logf(format string, args ...interface{})
+	Warn(i interface{})
+	Warnf(format string, args ...interface{})
+	Error(err error)
+	Errorf(format string, args ...interface{})
+	Debug(i interface{})
+	Debugf(format string, args ...interface{})
+	Fatal(err error)
+	Fatalf(format string, args ...interface{})
+	initLogger() error
+	SetLevel(level LogLevel)
+}
 type LogLevel string
 
 const (
@@ -40,7 +54,7 @@ type AppLogger struct {
 	Level LogLevel
 }
 
-func NewLogger(level LogLevel) *AppLogger {
+func NewLogger(level LogLevel) Interface {
 	al := &AppLogger{
 		Logger: nil,
 		Sugar:  nil,
@@ -53,7 +67,7 @@ func NewLogger(level LogLevel) *AppLogger {
 	return al
 }
 
-func NewNopLogger() *AppLogger {
+func NewNopLogger() Interface {
 	return &AppLogger{
 		Logger: zap.NewNop(),
 		Sugar:  zap.NewNop().Sugar(),
@@ -99,7 +113,6 @@ func (al *AppLogger) Debugf(format string, args ...interface{}) {
 }
 
 func (al *AppLogger) Fatal(err error) {
-	sentry.CaptureException(err)
 	al.Sugar.Fatalf("log.Fatal: %+v\n", err)
 }
 

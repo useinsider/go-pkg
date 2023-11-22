@@ -32,7 +32,7 @@ type queue struct {
 	maxBatchSizeBytes int
 	workers           int
 
-	logger *inslogger.AppLogger
+	logger inslogger.Interface
 }
 
 // Config represents the configuration settings required for initializing an SQS queue.
@@ -72,7 +72,7 @@ func NewSQS(config Config) Interface {
 		cfg.BaseEndpoint = aws.String(config.EndpointUrl)
 	}
 
-	var logger *inslogger.AppLogger
+	var logger inslogger.Interface
 	if config.LogLevel == "" {
 		logger = inslogger.NewNopLogger()
 	} else {
