@@ -260,15 +260,26 @@ type RedisInterface interface {
 // redisClient is the singleton client created by InitRedis function.
 var redisClient *redis.Client
 
+type Config struct {
+	RedisHost     string
+	RedisPoolSize int
+	DialTimeout   time.Duration
+	ReadTimeout   time.Duration
+	MaxRetries    int
+}
+
 // Init creates a client pool for redis connections.
-func Init(redisHost string, poolSize int) *redis.Client {
+func Init(cfg Config) *redis.Client {
 	if redisClient != nil {
 		return redisClient
 	}
 
 	redisClient = redis.NewClient(&redis.Options{
-		Addr:     redisHost,
-		PoolSize: poolSize,
+		Addr:        cfg.RedisHost,
+		PoolSize:    cfg.RedisPoolSize,
+		DialTimeout: cfg.DialTimeout,
+		ReadTimeout: cfg.ReadTimeout,
+		MaxRetries:  cfg.MaxRetries,
 	})
 
 	return redisClient
