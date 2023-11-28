@@ -45,6 +45,21 @@ func Error(err error) {
 	sentry.CaptureException(err)
 }
 
+// ErrorWithAdditionalData sends the error to sentry with additional data.
+func ErrorWithAdditionalData(err error, key string, value interface{}) {
+	if !cachedSettings.IsProduction {
+		fmt.Println(err)
+
+		return
+	}
+
+	sentry.WithScope(func(scope *sentry.Scope) {
+		scope.SetExtra(key, value)
+
+		sentry.CaptureException(err)
+	})
+}
+
 // Fatal sends the error to sentry and exit from the program.
 func Fatal(err error) {
 	if !cachedSettings.IsProduction {
