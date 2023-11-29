@@ -274,6 +274,18 @@ func Init(cfg Config) *redis.Client {
 		return redisClient
 	}
 
+	if cfg.RedisPoolSize == 0 {
+		cfg.RedisPoolSize = 10
+	}
+
+	if cfg.DialTimeout == 0 {
+		cfg.DialTimeout = 500 * time.Millisecond
+	}
+
+	if cfg.ReadTimeout == 0 {
+		cfg.ReadTimeout = 500 * time.Millisecond
+	}
+
 	redisClient = redis.NewClient(&redis.Options{
 		Addr:        cfg.RedisHost,
 		PoolSize:    cfg.RedisPoolSize,
