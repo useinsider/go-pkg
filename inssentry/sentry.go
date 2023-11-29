@@ -1,8 +1,8 @@
 package inssentry
 
 import (
-	"fmt"
 	"github.com/getsentry/sentry-go"
+	"log"
 	"time"
 )
 
@@ -37,7 +37,7 @@ func Flush() {
 // Error sends the error to sentry.
 func Error(err error) {
 	if !cachedSettings.IsProduction {
-		fmt.Println(err)
+		log.Println(err)
 
 		return
 	}
@@ -48,8 +48,7 @@ func Error(err error) {
 // ErrorWithAdditionalData sends the error to sentry with additional data.
 func ErrorWithAdditionalData(err error, key string, value interface{}) {
 	if !cachedSettings.IsProduction {
-		fmt.Println(err)
-
+		log.Println(err)
 		return
 	}
 
