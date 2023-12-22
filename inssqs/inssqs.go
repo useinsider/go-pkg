@@ -238,20 +238,20 @@ func (q *queue) deleteMessageBatch(entries []SQSDeleteMessageEntry, retryCount i
 
 	res, err := q.client.DeleteMessageBatch(context.Background(), batch)
 	if err != nil {
-		q.logger.Errorf("Error sending %d messages to SQS: %v\n", len(entries), err)
+		q.logger.Errorf("Error deleting %d messages to SQS: %v\n", len(entries), err)
 		return q.deleteMessageBatch(entries, retryCount-1)
 	}
 
 	attempts := getRequestAttemptCount(res.ResultMetadata)
 
 	if len(res.Failed) == 0 {
-		q.logger.Logf("Successfully sent %d messages to SQS after %d attempts\n", len(entries), attempts)
+		q.logger.Logf("Successfully deleted %d messages to SQS after %d attempts\n", len(entries), attempts)
 
 		return nil, nil
 	}
 
 	failedEntries := getFailedEntries(entries, res.Failed)
-	q.logger.Logf("Failed to send %d messages to SQS after %d attempts\n", len(failedEntries), attempts)
+	q.logger.Logf("Failed to delete %d messages to SQS after %d attempts\n", len(failedEntries), attempts)
 
 	return q.deleteMessageBatch(failedEntries, retryCount-1)
 }
