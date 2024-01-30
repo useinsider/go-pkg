@@ -10,6 +10,7 @@ type Cacher[K comparable, V any] interface {
 	Set(k K, v V, ttl time.Duration)
 	Exists(k K) bool
 	Delete(k K)
+	Stop()
 }
 
 type Cache[K comparable, V any] struct {
@@ -36,6 +37,11 @@ func (c *Cache[K, V]) Exists(k K) bool {
 // Delete deletes the key from the cache.
 func (c *Cache[K, V]) Delete(k K) {
 	c.cache.Delete(k)
+}
+
+// Stop stops the expired key clean-up.
+func (c *Cache[K, V]) Stop() {
+	c.cache.Stop()
 }
 
 // Cacheable is the main function that should be used as
