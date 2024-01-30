@@ -7,7 +7,7 @@ The insrequester package is designed to provide a resilient way to make HTTP req
 
 ```go
 import (
-    "github.com/useinsider/insrequester"
+    "github.com/useinsider/go-pkg/insrequester"
 )
 ```
 

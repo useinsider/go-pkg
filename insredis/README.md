@@ -13,7 +13,7 @@ geospatial operations, and more.
 To use this package, install it using Go modules:
 
 ```bash
-go get github.com/useinsider/insredis
+go get github.com/useinsider/go-pkg/insredis
 ```
 
 ## Usage
