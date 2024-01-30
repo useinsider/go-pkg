@@ -13,7 +13,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/useinsider/inssimpleroute"
+	"github.com/useinsider/go-pkg/inssimpleroute"
 )
 
 // Request type for the use case
