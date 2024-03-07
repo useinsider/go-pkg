@@ -68,4 +68,48 @@ func TestRequest_Get(t *testing.T) {
 		_, err = r.Get(req)
 		assert.ErrorIs(t, err, errors.ErrCircuitOpen)
 	})
+
+	t.Run("it_should_apply_headers_properly", func(t *testing.T) {
+		var receivedUserAgent string
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			receivedUserAgent = r.Header.Get("User-Agent")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"status": "OK"}`))
+		}))
+
+		defer ts.Close()
+
+		userAgent := "test-user-agent"
+		r := NewRequester().WithHeaders(Headers{{"User-Agent": userAgent}})
+		res, err := r.Get(RequestEntity{Endpoint: ts.URL})
+
+		assert.NoError(t, err)
+		assert.Equal(t, receivedUserAgent, userAgent)
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+	})
+
+	t.Run("it_should_override_Requester_level_header_if_RequestEntity_headers_set", func(t *testing.T) {
+		var receivedUserAgent string
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			receivedUserAgent = r.Header.Get("User-Agent")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"status": "OK"}`))
+		}))
+
+		defer ts.Close()
+
+		oldUserAgent := "old-user-agent"
+		r := NewRequester().WithHeaders(Headers{{"User-Agent": oldUserAgent}})
+
+		newUserAgent := "new-user-agent"
+		req := RequestEntity{
+			Endpoint: ts.URL,
+			Headers:  Headers{{"User-Agent": newUserAgent}},
+		}
+		res, err := r.Get(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, receivedUserAgent, newUserAgent)
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+	})
 }
