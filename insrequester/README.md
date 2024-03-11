@@ -65,6 +65,16 @@ timeoutSeconds := 30
 requester.WithTimeout(timeoutSeconds) // this timeout overrides the default timeout
 ```
 
+#### Default Headers
+For applying default headers to all requests, you can use the WithDefaultHeaders method:
+
+```go
+headers := insrequester.Headers{{"Authorization": "Bearer token"}}
+requester.WithHeaders(headers)
+```
+It should be noted that you can still override these default headers by providing the same header in the request entity.
+
+
 ### Loading Middlewares
 After configuring the desired resilience features, load the configured middlewares using the Load method:
 
