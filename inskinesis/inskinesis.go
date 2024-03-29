@@ -116,7 +116,7 @@ func NewKinesis(config Config) (StreamInterface, error) {
 		stopBatchChannel: make(chan bool, 10),
 
 		retryCount:    config.RetryCount,
-		retryWaitTime: 100 * time.Millisecond,
+		retryWaitTime: config.RetryWaitTime,
 
 		verbose: config.Verbose,
 	}
