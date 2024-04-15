@@ -122,25 +122,28 @@ func (c *Config) setDefaults() {
 // ReceiveMessageBatch receives a batch of messages from an SQS queue
 //
 // Parameters:
-// - maxMessages: An integer indicating the maximum number of messages to receive in a single batch.
-// - visibilityTimeout: An integer indicating the duration in seconds for which the received messages are hidden from subsequent retrieval.
+// - rmi: ReceiveMessageInput containing the parameters for receiving messages from the SQS queue.
 //
 // Returns:
 // - res: A pointer to ReceiveMessageOutput containing the received messages.
 // - err: An error indicating any failure during the receiving process, nil if all messages were received successfully.
-func (q *queue) ReceiveMessageBatch(maxMessages, visibilityTimeout int32) (ReceiveMessageOutput, error) {
-	if maxMessages > 10 {
+func (q *queue) ReceiveMessageBatch(rmi ReceiveMessageInput) (ReceiveMessageOutput, error) {
+	if rmi.MaxNumberOfMessages > 10 {
 		return ReceiveMessageOutput{}, fmt.Errorf("maxMessages should be less than or equal to 10")
 	}
 
-	if maxMessages < 1 {
+	if rmi.MaxNumberOfMessages < 1 {
 		return ReceiveMessageOutput{}, fmt.Errorf("maxMessages should be greater than 0")
 	}
 
 	input := &awssqs.ReceiveMessageInput{
-		QueueUrl:            q.url,
-		MaxNumberOfMessages: maxMessages,
-		VisibilityTimeout:   visibilityTimeout,
+		QueueUrl:                q.url,
+		MaxNumberOfMessages:     rmi.MaxNumberOfMessages,
+		VisibilityTimeout:       rmi.VisibilityTimeout,
+		AttributeNames:          rmi.AttributeNames,
+		MessageAttributeNames:   rmi.MessageAttributeNames,
+		ReceiveRequestAttemptId: rmi.ReceiveRequestAttemptId,
+		WaitTimeSeconds:         rmi.WaitTimeSeconds,
 	}
 
 	res, err := q.client.ReceiveMessage(context.Background(), input)
