@@ -19,7 +19,7 @@ import (
 type Interface interface {
 	SendMessageBatch(entries []SQSMessageEntry) (failed []SQSMessageEntry, err error)
 	DeleteMessageBatch(entries []SQSDeleteMessageEntry) (failed []SQSDeleteMessageEntry, err error)
-	ReceiveMessageBatch(maxMessages, visibilityTimeout int32) (ReceiveMessageOutput, error)
+	ReceiveMessageBatch(rmi ReceiveMessageInput) (ReceiveMessageOutput, error)
 }
 
 type queue struct {
