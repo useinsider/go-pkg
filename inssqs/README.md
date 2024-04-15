@@ -61,6 +61,9 @@ if err != nil {
 }
 ```
 
+### Receiving Messages
+Receive batch of messages from SQS queue using `ReceiveMessageBatch()`
+
 ## Configuration Options
 - Region: AWS region where the SQS queue resides.
 - QueueName: Name of the SQS queue.

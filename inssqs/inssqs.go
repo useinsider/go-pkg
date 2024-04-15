@@ -2,6 +2,7 @@ package inssqs
 
 import (
 	"context"
+	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -18,6 +19,7 @@ import (
 type Interface interface {
 	SendMessageBatch(entries []SQSMessageEntry) (failed []SQSMessageEntry, err error)
 	DeleteMessageBatch(entries []SQSDeleteMessageEntry) (failed []SQSDeleteMessageEntry, err error)
+	ReceiveMessageBatch(maxMessages, visibilityTimeout int32) (ReceiveMessageOutput, error)
 }
 
 type queue struct {
@@ -115,6 +117,39 @@ func (c *Config) setDefaults() {
 	if c.RetryCount == 0 {
 		c.RetryCount = 3
 	}
+}
+
+// ReceiveMessageBatch receives a batch of messages from an SQS queue
+//
+// Parameters:
+// - maxMessages: An integer indicating the maximum number of messages to receive in a single batch.
+// - visibilityTimeout: An integer indicating the duration in seconds for which the received messages are hidden from subsequent retrieval.
+//
+// Returns:
+// - res: A pointer to ReceiveMessageOutput containing the received messages.
+// - err: An error indicating any failure during the receiving process, nil if all messages were received successfully.
+func (q *queue) ReceiveMessageBatch(maxMessages, visibilityTimeout int32) (ReceiveMessageOutput, error) {
+	if maxMessages > 10 {
+		return ReceiveMessageOutput{}, fmt.Errorf("maxMessages should be less than or equal to 10")
+	}
+
+	if maxMessages < 1 {
+		return ReceiveMessageOutput{}, fmt.Errorf("maxMessages should be greater than 0")
+	}
+
+	input := &awssqs.ReceiveMessageInput{
+		QueueUrl:            q.url,
+		MaxNumberOfMessages: maxMessages,
+		VisibilityTimeout:   visibilityTimeout,
+	}
+
+	res, err := q.client.ReceiveMessage(context.Background(), input)
+
+	if err != nil {
+		return ReceiveMessageOutput{}, err
+	}
+
+	return ReceiveMessageOutput{Messages: res.Messages}, nil
 }
 
 // SendMessageBatch sends a batch of messages to an SQS queue, handling retries and respecting batch size constraints.

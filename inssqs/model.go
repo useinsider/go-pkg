@@ -1,6 +1,9 @@
 package inssqs
 
-import "github.com/aws/aws-sdk-go-v2/service/sqs/types"
+import (
+	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
+	"github.com/aws/smithy-go/middleware"
+)
 
 type entry interface {
 	getId() *string
@@ -42,4 +45,12 @@ func (e SQSDeleteMessageEntry) toDeleteMessageBatchRequestEntry() types.DeleteMe
 		Id:            e.Id,
 		ReceiptHandle: e.ReceiptHandle,
 	}
+}
+
+type ReceiveMessageOutput struct {
+	// A list of messages.
+	Messages []types.Message
+
+	// Metadata pertaining to the operation's result.
+	ResultMetadata middleware.Metadata
 }

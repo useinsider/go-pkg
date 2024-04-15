@@ -66,3 +66,17 @@ func (mr *MockInterfaceMockRecorder) SendMessageBatch(entries any) *gomock.Call 
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendMessageBatch", reflect.TypeOf((*MockInterface)(nil).SendMessageBatch), entries)
 }
+
+func (m *MockInterface) ReceiveMessageBatch(maxMessages, visibilityTimeout int32) (ReceiveMessageOutput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReceiveMessageBatch", maxMessages, visibilityTimeout)
+	ret0, _ := ret[0].(ReceiveMessageOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReceiveMessageBatch indicates an expected call of ReceiveMessageBatch.
+func (mr *MockInterfaceMockRecorder) ReceiveMessageBatch(maxMessages, visibilityTimeout interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceiveMessageBatch", reflect.TypeOf((*MockInterface)(nil).ReceiveMessageBatch), maxMessages, visibilityTimeout)
+}
