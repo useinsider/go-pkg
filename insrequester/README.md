@@ -61,8 +61,8 @@ requester.WithCircuitbreaker(circuitBreakerConfig)
 For setting a timeout on requests, you can utilize the WithTimeout method:
 
 ```go
-timeoutSeconds := 30
-requester.WithTimeout(timeoutSeconds) // this timeout overrides the default timeout
+timeout := 30 * time.Duration
+requester.WithTimeout(timeout) // this timeout overrides the default timeout
 ```
 
 #### Default Headers
