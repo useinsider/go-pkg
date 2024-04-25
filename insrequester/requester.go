@@ -53,7 +53,7 @@ type RequestEntity struct {
 }
 
 type Request struct {
-	timeout     int
+	timeout     time.Duration
 	runner      goresilience.Runner
 	middlewares []goresilience.Middleware
 	headers     Headers
@@ -189,13 +189,13 @@ func (r *Request) WithCircuitbreaker(config CircuitBreakerConfig) *Request {
 
 func (r *Request) WithTimeout(timeoutSeconds int) *Request {
 	if timeoutSeconds == 0 {
-		r.timeout = 30
+		r.timeout = 30 * time.Second
 	} else {
-		r.timeout = timeoutSeconds
+		r.timeout = time.Duration(timeoutSeconds) * time.Second
 	}
 
 	mw := timeout.NewMiddleware(timeout.Config{
-		Timeout: time.Duration(r.timeout) * time.Second,
+		Timeout: r.timeout,
 	})
 	r.middlewares = append(r.middlewares, mw)
 
