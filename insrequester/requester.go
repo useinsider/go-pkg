@@ -8,7 +8,7 @@ import (
 	"github.com/slok/goresilience/circuitbreaker"
 	goresilienceErrors "github.com/slok/goresilience/errors"
 	"github.com/slok/goresilience/retry"
-	"github.com/slok/goresilience/timeout"
+	resilienceTimeout "github.com/slok/goresilience/timeout"
 	"net/http"
 	"time"
 )
@@ -38,7 +38,7 @@ type Requester interface {
 	Delete(re RequestEntity) (*http.Response, error)
 	WithRetry(config RetryConfig) *Request
 	WithCircuitbreaker(config CircuitBreakerConfig) *Request
-	WithTimeout(timeoutSeconds int) *Request
+	WithTimeout(timeout time.Duration) *Request
 	WithHeaders(headers Headers) *Request
 	Load() *Request
 }
@@ -53,7 +53,7 @@ type RequestEntity struct {
 }
 
 type Request struct {
-	timeout     int
+	timeout     time.Duration
 	runner      goresilience.Runner
 	middlewares []goresilience.Middleware
 	headers     Headers
@@ -187,15 +187,15 @@ func (r *Request) WithCircuitbreaker(config CircuitBreakerConfig) *Request {
 	return r
 }
 
-func (r *Request) WithTimeout(timeoutSeconds int) *Request {
-	if timeoutSeconds == 0 {
-		r.timeout = 30
+func (r *Request) WithTimeout(timeout time.Duration) *Request {
+	if timeout == 0 {
+		r.timeout = 30 * time.Second
 	} else {
-		r.timeout = timeoutSeconds
+		r.timeout = timeout
 	}
 
-	mw := timeout.NewMiddleware(timeout.Config{
-		Timeout: time.Duration(r.timeout) * time.Second,
+	mw := resilienceTimeout.NewMiddleware(resilienceTimeout.Config{
+		Timeout: r.timeout,
 	})
 	r.middlewares = append(r.middlewares, mw)
 
