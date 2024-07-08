@@ -1,7 +1,6 @@
 package insrequester
 
 import (
-	"github.com/slok/goresilience/errors"
 	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
@@ -66,7 +65,7 @@ func TestRequest_Get(t *testing.T) {
 			_, _ = r.Get(req)
 		}
 		_, err = r.Get(req)
-		assert.ErrorIs(t, err, errors.ErrCircuitOpen)
+		assert.ErrorIs(t, err, ErrCircuitBreakerOpen)
 	})
 
 	t.Run("it_should_apply_headers_properly", func(t *testing.T) {
