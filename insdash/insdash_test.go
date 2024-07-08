@@ -23,7 +23,7 @@ func Test_createBatches(t *testing.T) {
 	})
 
 	t.Run("should_return_batches_by_record_limit", func(t *testing.T) {
-		batches, err := CreateBatches([]string{"test", "test"}, 10, kb64)
+		batches, err := CreateBatches([]string{"test", "test"}, 1, kb64)
 
 		assert.Nil(t, err, "err should be nil")
 		assert.Equal(t, 2, len(batches), "batches length should be equal to 2")
