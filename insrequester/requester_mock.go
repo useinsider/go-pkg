@@ -7,6 +7,7 @@ package insrequester
 import (
 	http "net/http"
 	reflect "reflect"
+	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 )
@@ -151,15 +152,15 @@ func (mr *MockRequesterMockRecorder) WithRetry(config interface{}) *gomock.Call 
 }
 
 // WithTimeout mocks base method.
-func (m *MockRequester) WithTimeout(timeoutSeconds int) *Request {
+func (m *MockRequester) WithTimeout(timeout time.Duration) *Request {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WithTimeout", timeoutSeconds)
+	ret := m.ctrl.Call(m, "WithTimeout", timeout)
 	ret0, _ := ret[0].(*Request)
 	return ret0
 }
 
 // WithTimeout indicates an expected call of WithTimeout.
-func (mr *MockRequesterMockRecorder) WithTimeout(timeoutSeconds interface{}) *gomock.Call {
+func (mr *MockRequesterMockRecorder) WithTimeout(timeout interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithTimeout", reflect.TypeOf((*MockRequester)(nil).WithTimeout), timeoutSeconds)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithTimeout", reflect.TypeOf((*MockRequester)(nil).WithTimeout), timeout)
 }
