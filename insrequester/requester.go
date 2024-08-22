@@ -8,7 +8,6 @@ import (
 	"github.com/slok/goresilience/circuitbreaker"
 	goresilienceErrors "github.com/slok/goresilience/errors"
 	"github.com/slok/goresilience/retry"
-	resilienceTimeout "github.com/slok/goresilience/timeout"
 	"net/http"
 	"time"
 )
@@ -102,9 +101,9 @@ func (r *Request) sendRequest(httpMethod string, re RequestEntity) (*http.Respon
 		re.Headers = append(r.headers, re.Headers...) // RequestEntity headers will override Requester level headers.
 		re.applyHeadersToRequest(req)
 
-		res, outerErr = (&http.Client{Timeout: time.Duration(r.timeout) * time.Second}).Do(req)
+		res, outerErr = (&http.Client{Timeout: r.timeout}).Do(req)
 		if outerErr != nil {
-			return nil
+			return ErrRetryable
 		}
 
 		if res.StatusCode >= 100 && res.StatusCode < 200 ||
@@ -193,11 +192,6 @@ func (r *Request) WithTimeout(timeout time.Duration) *Request {
 	} else {
 		r.timeout = timeout
 	}
-
-	mw := resilienceTimeout.NewMiddleware(resilienceTimeout.Config{
-		Timeout: r.timeout,
-	})
-	r.middlewares = append(r.middlewares, mw)
 
 	return r
 }
