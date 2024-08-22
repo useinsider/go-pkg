@@ -23,7 +23,7 @@ func TestRequest_Get(t *testing.T) {
 		assert.Equal(t, http.StatusOK, res.StatusCode)
 	})
 
-	t.Run("it_should_load_retrier_properly", func(t *testing.T) {
+	t.Run("it_should_retry_on_internal_server_error", func(t *testing.T) {
 		retryTimes := 0
 		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			retryTimes++
@@ -37,6 +37,32 @@ func TestRequest_Get(t *testing.T) {
 			WaitBase: 20 * time.Millisecond,
 			Times:    3,
 		}).Load()
+
+		req := RequestEntity{
+			Endpoint: server.URL,
+		}
+		_, _ = r.Get(req)
+
+		assert.Equal(t, 4, retryTimes)
+	})
+
+	t.Run("it_should_retry_on_timeout", func(t *testing.T) {
+		retryTimes := 0
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			retryTimes++
+			time.Sleep(100 * time.Millisecond)
+			w.WriteHeader(http.StatusInternalServerError)
+		})
+
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		r := NewRequester().
+			WithTimeout(1 * time.Millisecond).
+			WithRetry(RetryConfig{
+				WaitBase: 20 * time.Millisecond,
+				Times:    3,
+			}).Load()
 
 		req := RequestEntity{
 			Endpoint: server.URL,
