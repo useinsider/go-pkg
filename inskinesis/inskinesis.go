@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/aws/aws-sdk-go/aws/client"
 	"math"
 	"sync"
 	"time"
@@ -92,6 +93,12 @@ func NewKinesis(config Config) (StreamInterface, error) {
 	awsSession, err := session.NewSession(&awsConfig)
 	if err != nil {
 		return nil, err
+	}
+
+	awsSession.Config.Retryer = CustomRetryer{
+		Retryer: client.DefaultRetryer{
+			NumMaxRetries: 3,
+		},
 	}
 
 	kinesisClient := kinesis.New(awsSession)
