@@ -20,6 +20,14 @@ func Init(Driver, DBUser, DBPassword, DBHost, DBName string) (*sql.DB, error) {
 		return sqlClient, nil
 	}
 
+	var err error
+	sqlClient, err = New(Driver, DBUser, DBPassword, DBHost, DBName)
+
+	return sqlClient, err
+}
+
+// New creates brand new sql client
+func New(Driver string, DBUser string, DBPassword string, DBHost string, DBName string) (*sql.DB, error) {
 	dsn := fmt.Sprintf(
 		"%v:%v@%v/%v?charset=utf8mb4&collation=utf8mb4_unicode_ci&parseTime=true",
 		DBUser,
@@ -32,8 +40,6 @@ func Init(Driver, DBUser, DBPassword, DBHost, DBName string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	sqlClient = db
 
 	return db, err
 }
@@ -49,11 +55,17 @@ func WrapWithGorm(sqlDB *sql.DB) (*gorm.DB, error) {
 		return gormClient, nil
 	}
 
+	var err error
+	gormClient, err = NewGorm(sqlDB)
+
+	return gormClient, err
+}
+
+// NewGorm wrap new sql client
+func NewGorm(sqlDB *sql.DB) (*gorm.DB, error) {
 	gormDB, err := gorm.Open(mysql.New(mysql.Config{
 		Conn: sqlDB,
 	}), &gorm.Config{})
-
-	gormClient = gormDB
 
 	return gormDB, err
 }
