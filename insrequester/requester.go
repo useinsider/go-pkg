@@ -131,7 +131,7 @@ func (r *Request) sendRequest(httpMethod string, re RequestEntity) (*http.Respon
 			if res != nil && (res.StatusCode >= 100 && res.StatusCode < 200 ||
 				res.StatusCode == 429 ||
 				res.StatusCode >= 500 && res.StatusCode <= 599) {
-				return nil, errors.Wrap(ErrCircuitBreakerOpen, r.getBodyError(*res))
+				return nil, errors.Wrap(ErrCircuitBreakerOpen, r.getResponseBody(*res))
 			}
 		}
 		return nil, ErrCircuitBreakerOpen
@@ -164,16 +164,16 @@ func (r RequestEntity) applyHeadersToRequest(request *http.Request) {
 	}
 }
 
-func (r *Request) getBodyError(res http.Response) string {
+func (r *Request) getResponseBody(res http.Response) string {
 	var err error
 
 	bodyBytes, err := io.ReadAll(res.Body)
 
 	if err != nil {
-		return res.Status + " : " + ErrReadingBody.Error()
+		return fmt.Sprintf("%s : %v", res.Status, ErrReadingBody)
 	}
 
-	return res.Status + " : " + string(bodyBytes)
+	return fmt.Sprintf("%s : %s", res.Status, string(bodyBytes))
 }
 
 func (r *Request) WithRetry(config RetryConfig) *Request {
