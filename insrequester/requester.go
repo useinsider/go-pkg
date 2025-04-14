@@ -23,6 +23,7 @@ type CircuitBreakerConfig struct {
 	MinimumRequestToOpen         int
 	SuccessfulRequiredOnHalfOpen int
 	WaitDurationInOpenState      time.Duration
+	WrapError                    bool
 }
 
 type RetryConfig struct {
@@ -46,6 +47,10 @@ type Requester interface {
 
 type Headers []map[string]interface{}
 
+type Configs struct {
+	WrapCBError bool
+}
+
 // RequestEntity contains required information for sending http request.
 type RequestEntity struct {
 	Headers  Headers
@@ -57,6 +62,7 @@ type Request struct {
 	timeout     time.Duration
 	runner      goresilience.Runner
 	middlewares []goresilience.Middleware
+	configs     Configs
 	headers     Headers
 }
 
@@ -118,13 +124,15 @@ func (r *Request) sendRequest(httpMethod string, re RequestEntity) (*http.Respon
 	})
 
 	if runnerErr == goresilienceErrors.ErrCircuitOpen {
-		if outerErr != nil {
-			return nil, errors.Wrap(ErrCircuitBreakerOpen, outerErr.Error())
-		}
-		if res != nil && (res.StatusCode >= 100 && res.StatusCode < 200 ||
-			res.StatusCode == 429 ||
-			res.StatusCode >= 500 && res.StatusCode <= 599) {
-			return nil, errors.Wrap(ErrCircuitBreakerOpen, r.getBodyError(*res))
+		if r.configs.WrapCBError {
+			if outerErr != nil {
+				return nil, errors.Wrap(ErrCircuitBreakerOpen, outerErr.Error())
+			}
+			if res != nil && (res.StatusCode >= 100 && res.StatusCode < 200 ||
+				res.StatusCode == 429 ||
+				res.StatusCode >= 500 && res.StatusCode <= 599) {
+				return nil, errors.Wrap(ErrCircuitBreakerOpen, r.getBodyError(*res))
+			}
 		}
 		return nil, ErrCircuitBreakerOpen
 	}
@@ -162,10 +170,10 @@ func (r *Request) getBodyError(res http.Response) string {
 	bodyBytes, err := io.ReadAll(res.Body)
 
 	if err != nil {
-		return ErrReadingBody.Error()
+		return res.Status + " : " + ErrReadingBody.Error()
 	}
 
-	return string(bodyBytes)
+	return res.Status + " : " + string(bodyBytes)
 }
 
 func (r *Request) WithRetry(config RetryConfig) *Request {
@@ -196,6 +204,10 @@ func (r *Request) WithCircuitbreaker(config CircuitBreakerConfig) *Request {
 
 	if config.WaitDurationInOpenState == 0 {
 		config.WaitDurationInOpenState = 5 * time.Second
+	}
+
+	if config.WrapError {
+		r.configs.WrapCBError = true
 	}
 
 	mw := circuitbreaker.NewMiddleware(circuitbreaker.Config{

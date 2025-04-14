@@ -110,6 +110,7 @@ func TestRequest_Get(t *testing.T) {
 				MinimumRequestToOpen:         3,
 				SuccessfulRequiredOnHalfOpen: 1,
 				WaitDurationInOpenState:      300 * time.Second,
+				WrapError:                    true,
 			}).Load()
 
 		var err error
