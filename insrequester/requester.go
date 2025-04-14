@@ -128,10 +128,8 @@ func (r *Request) sendRequest(httpMethod string, re RequestEntity) (*http.Respon
 			if outerErr != nil {
 				return nil, errors.Wrap(ErrCircuitBreakerOpen, outerErr.Error())
 			}
-			if res != nil && (res.StatusCode >= 100 && res.StatusCode < 200 ||
-				res.StatusCode == 429 ||
-				res.StatusCode >= 500 && res.StatusCode <= 599) {
-				return nil, errors.Wrap(ErrCircuitBreakerOpen, r.getResponseBody(*res))
+			if res != nil {
+				return nil, errors.Wrap(ErrCircuitBreakerOpen, r.getResponseBody(res))
 			}
 		}
 		return nil, ErrCircuitBreakerOpen
@@ -164,7 +162,7 @@ func (r RequestEntity) applyHeadersToRequest(request *http.Request) {
 	}
 }
 
-func (r *Request) getResponseBody(res http.Response) string {
+func (r *Request) getResponseBody(res *http.Response) string {
 	var err error
 
 	bodyBytes, err := io.ReadAll(res.Body)
