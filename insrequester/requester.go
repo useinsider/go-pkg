@@ -23,7 +23,6 @@ type CircuitBreakerConfig struct {
 	MinimumRequestToOpen         int
 	SuccessfulRequiredOnHalfOpen int
 	WaitDurationInOpenState      time.Duration
-	WrapError                    bool
 }
 
 type RetryConfig struct {
@@ -47,10 +46,6 @@ type Requester interface {
 
 type Headers []map[string]interface{}
 
-type Configs struct {
-	WrapCBError bool
-}
-
 // RequestEntity contains required information for sending http request.
 type RequestEntity struct {
 	Headers  Headers
@@ -62,7 +57,6 @@ type Request struct {
 	timeout     time.Duration
 	runner      goresilience.Runner
 	middlewares []goresilience.Middleware
-	configs     Configs
 	headers     Headers
 }
 
@@ -124,13 +118,11 @@ func (r *Request) sendRequest(httpMethod string, re RequestEntity) (*http.Respon
 	})
 
 	if runnerErr == goresilienceErrors.ErrCircuitOpen {
-		if r.configs.WrapCBError {
-			if outerErr != nil {
-				return nil, errors.Wrap(ErrCircuitBreakerOpen, outerErr.Error())
-			}
-			if res != nil {
-				return nil, errors.Wrap(ErrCircuitBreakerOpen, r.getResponseBody(res))
-			}
+		if outerErr != nil {
+			return nil, errors.Wrap(ErrCircuitBreakerOpen, outerErr.Error())
+		}
+		if res != nil {
+			return nil, errors.Wrap(ErrCircuitBreakerOpen, r.getResponseBody(res))
 		}
 		return nil, ErrCircuitBreakerOpen
 	}
@@ -163,7 +155,11 @@ func (r RequestEntity) applyHeadersToRequest(request *http.Request) {
 }
 
 func (r *Request) getResponseBody(res *http.Response) string {
-	var err error
+	if res.Body == nil {
+		return res.Status
+	}
+
+	defer res.Body.Close()
 
 	bodyBytes, err := io.ReadAll(res.Body)
 
@@ -202,10 +198,6 @@ func (r *Request) WithCircuitbreaker(config CircuitBreakerConfig) *Request {
 
 	if config.WaitDurationInOpenState == 0 {
 		config.WaitDurationInOpenState = 5 * time.Second
-	}
-
-	if config.WrapError {
-		r.configs.WrapCBError = true
 	}
 
 	mw := circuitbreaker.NewMiddleware(circuitbreaker.Config{
