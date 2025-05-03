@@ -94,6 +94,32 @@ func TestRequest_Get(t *testing.T) {
 		assert.ErrorIs(t, err, ErrCircuitBreakerOpen)
 	})
 
+	t.Run("it_should_return_last_error_if_circuit_breaker_and_retry_enabled", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"status": "FAILED"}`))
+		}))
+		defer ts.Close()
+
+		r := NewRequester().WithTimeout(1 * time.Millisecond).
+			WithRetry(RetryConfig{
+				WaitBase: 20 * time.Millisecond,
+				Times:    4,
+			}).
+			WithCircuitbreaker(CircuitBreakerConfig{
+				MinimumRequestToOpen:         3,
+				SuccessfulRequiredOnHalfOpen: 1,
+				WaitDurationInOpenState:      300 * time.Second,
+			}).Load()
+
+		var err error
+		req := RequestEntity{Endpoint: ts.URL}
+
+		_, err = r.Get(req)
+		assert.ErrorIs(t, err, ErrCircuitBreakerOpen)
+		assert.Contains(t, err.Error(), "{\"status\": \"FAILED\"}")
+	})
+
 	t.Run("it_should_apply_headers_properly", func(t *testing.T) {
 		var receivedUserAgent string
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
