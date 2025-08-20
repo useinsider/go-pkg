@@ -1,0 +1,33 @@
+name: Block MySQL 5.x Usage
+
+on:
+  pull_request:
+    branches:
+      - develop
+
+jobs:
+  mysql-check:
+    runs-on:
+      labels: self-hosted
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for MySQL 5.x
+        run: |
+          echo "Scanning for MySQL 5.x usage..."
+          matches=$(grep -rEn \
+            --include="*.sql" \
+            --include="*.tf" \
+            --include="*.yml" \
+            --include="*.yaml" \
+            --include="*Dockerfile*" \
+            "mysql[^0-9]*5\." . || true)
+          if [[ -n "$matches" ]]; then
+            echo "::error::MySQL 5.x usage detected within the file(s) below. Please upgrade to MySQL 8.x."
+            echo "$matches"
+            exit 1
+          else
+            echo "No MySQL 5.x usage found."
+          fi
