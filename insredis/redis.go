@@ -1,6 +1,7 @@
 package insredis
 
 import (
+	"crypto/tls"
 	"time"
 
 	"github.com/go-redis/redis"
@@ -266,6 +267,7 @@ type Config struct {
 	DialTimeout   time.Duration
 	ReadTimeout   time.Duration
 	MaxRetries    int
+	TLSConfig     *tls.Config
 }
 
 // Init creates a client pool for redis connections.
@@ -292,6 +294,7 @@ func Init(cfg Config) *redis.Client {
 		DialTimeout: cfg.DialTimeout,
 		ReadTimeout: cfg.ReadTimeout,
 		MaxRetries:  cfg.MaxRetries,
+		TLSConfig:   cfg.TLSConfig,
 	})
 
 	return redisClient
