@@ -36,6 +36,10 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
+github.com/useinsider/go-pkg/insdash v1.0.0 h1:DE0GuZNFIvnGYsMOnVhzh5zLdwLTJeMdCuJQ9FbXJ/o=
+github.com/useinsider/go-pkg/insdash v1.0.0/go.mod h1:SqgwxuJtcu2zRca+lGi0NudR+TMyA9YOH8xSEVF8qyU=
+github.com/useinsider/go-pkg/inslogger v1.0.0 h1:5xweYJj0s8TKeH+VZ4FOWm7nR56XDF8LrW71bt8YEes=
+github.com/useinsider/go-pkg/inslogger v1.0.0/go.mod h1:9qrRWJYNPS8QFRMvi7P4HT8lVQqWTY5V1hnvv/gxWiI=
 go.uber.org/goleak v1.2.0 h1:xqgm/S+aQvhWFTtR0XK3Jvg7z8kGV8P4X14IzwN3Eqk=
 go.uber.org/goleak v1.2.0/go.mod h1:XJYK+MuIchqpmGmUSAzotztawfKvYLUIgg7guXrwVUo=
 go.uber.org/mock v0.6.0 h1:hyF9dfmbgIX5EfOdasqLsWD6xqpNZlXblLB/Dbnwv3Y=

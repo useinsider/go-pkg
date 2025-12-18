@@ -9,8 +9,8 @@ require (
 	github.com/aws/smithy-go v1.17.0
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.11.1
-	github.com/useinsider/go-pkg/insdash v0.0.0
-	github.com/useinsider/go-pkg/inslogger v0.0.0
+	github.com/useinsider/go-pkg/insdash v1.0.0
+	github.com/useinsider/go-pkg/inslogger v1.0.0
 	go.uber.org/mock v0.6.0
 )
 
@@ -31,7 +31,3 @@ require (
 	go.uber.org/zap v1.26.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/useinsider/go-pkg/insdash => ../insdash
-
-replace github.com/useinsider/go-pkg/inslogger => ../inslogger

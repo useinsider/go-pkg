@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/Jamil-Najafov/go-aws-ssm v0.9.0
-	github.com/useinsider/go-pkg/inscacheable v0.0.0
+	github.com/useinsider/go-pkg/inscacheable v1.0.0
 )
 
 require (
@@ -14,5 +14,3 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 )
-
-replace github.com/useinsider/go-pkg/inscacheable => ../inscacheable
