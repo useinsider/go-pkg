@@ -307,17 +307,25 @@ func (q *queue) sendMessageBatch(entries []SQSMessageEntry, retryCount int) (fai
 //
 // Returns:
 // - queueUrl: A pointer to a string containing the URL of the SQS queue.
-// - err: An error if fetching the queue URL fails, nil otherwise.
+// - err: An error if fetching the queue URL fails after all retry attempts, nil otherwise.
 func (q *queue) getQueueUrl() (queueUrl *string, err error) {
 	if q.url != nil {
 		return q.url, nil
+	}
+
+	return q.getQueueUrlWithRetry(q.retryCount)
+}
+
+func (q *queue) getQueueUrlWithRetry(retryCount int) (*string, error) {
+	if retryCount == 0 {
+		return nil, ErrRetryCountExceeded
 	}
 
 	res, err := q.client.GetQueueUrl(context.Background(), &awssqs.GetQueueUrlInput{
 		QueueName: aws.String(q.name),
 	})
 	if err != nil {
-		return nil, err
+		return q.getQueueUrlWithRetry(retryCount - 1)
 	}
 
 	q.url = res.QueueUrl
