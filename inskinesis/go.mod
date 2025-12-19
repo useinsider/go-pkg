@@ -1,12 +1,12 @@
 module github.com/useinsider/go-pkg/inskinesis
 
-go 1.23.0
+go 1.19
 
 require (
 	github.com/aws/aws-sdk-go v1.44.3
 	github.com/google/uuid v1.3.1
-	github.com/stretchr/testify v1.11.1
-	go.uber.org/mock v0.6.0
+	github.com/stretchr/testify v1.8.1
+	go.uber.org/mock v0.3.0
 )
 
 require (

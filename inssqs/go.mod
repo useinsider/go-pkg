@@ -1,6 +1,6 @@
 module github.com/useinsider/go-pkg/inssqs
 
-go 1.23.0
+go 1.19
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.23.1
@@ -8,10 +8,10 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.28.2
 	github.com/aws/smithy-go v1.17.0
 	github.com/pkg/errors v0.9.1
-	github.com/stretchr/testify v1.11.1
+	github.com/stretchr/testify v1.8.1
 	github.com/useinsider/go-pkg/insdash v1.0.0
 	github.com/useinsider/go-pkg/inslogger v1.0.0
-	go.uber.org/mock v0.6.0
+	go.uber.org/mock v0.3.0
 )
 
 require (

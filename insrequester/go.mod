@@ -6,7 +6,7 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/pkg/errors v0.9.1
 	github.com/slok/goresilience v0.2.0
-	github.com/stretchr/testify v1.2.2
+	github.com/stretchr/testify v1.8.1
 )
 
 require (
@@ -19,4 +19,5 @@ require (
 	github.com/prometheus/client_model v0.0.0-20180712105110-5c3871d89910 // indirect
 	github.com/prometheus/common v0.0.0-20181126121408-4724e9255275 // indirect
 	github.com/prometheus/procfs v0.0.0-20181204211112-1dc9a6cbc91a // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
