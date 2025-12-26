@@ -86,3 +86,7 @@ Run tests for a specific package:
 ```bash
 cd insredis && go test ./... -count=1
 ```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development and release guidelines.
