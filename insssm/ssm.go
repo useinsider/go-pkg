@@ -1,10 +1,12 @@
 package insssm
 
 import (
-	awsssm "github.com/Jamil-Najafov/go-aws-ssm"
-	"github.com/useinsider/go-pkg/inscacheable"
+	"fmt"
 	"os"
 	"time"
+
+	awsssm "github.com/Jamil-Najafov/go-aws-ssm"
+	"github.com/useinsider/go-pkg/inscacheable"
 )
 
 // ParameterStore is the aws client for parameter store
@@ -13,7 +15,7 @@ var ParameterStore *awsssm.ParameterStore
 // ttl value is used to tell cacheable to long it should cache the value.
 var ttl = 1 * time.Minute
 
-//cache is the instance of cacheable wrapped ssm get function.
+// cache is the instance of cacheable wrapped ssm get function.
 var cache = inscacheable.Cacheable(get, &ttl)
 
 // Init
@@ -22,7 +24,7 @@ func Init() {
 	if os.Getenv("ENV") != "LOCAL" {
 		pmStore, err := awsssm.NewParameterStore()
 		if err != nil {
-			panic(err)
+			panic(fmt.Sprintf("insssm: failed to initialize SSM parameter store: %v", err))
 		}
 
 		ParameterStore = pmStore
@@ -40,7 +42,7 @@ func Get(key string) string {
 func get(key string) string {
 	params, err := ParameterStore.GetParameter(key, true)
 	if err != nil {
-		panic(err)
+		panic(fmt.Sprintf("insssm: failed to get SSM parameter %q: %v", key, err))
 	}
 
 	return params.GetValue()
