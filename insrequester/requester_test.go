@@ -8,6 +8,16 @@ import (
 	"time"
 )
 
+type recordingTransport struct {
+	wrapped     http.RoundTripper
+	onRoundTrip func()
+}
+
+func (t *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	t.onRoundTrip()
+	return t.wrapped.RoundTrip(req)
+}
+
 func TestRequest_Get(t *testing.T) {
 	t.Run("it_should_return_response_properly", func(t *testing.T) {
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -137,6 +147,26 @@ func TestRequest_Get(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, receivedUserAgent, userAgent)
 		assert.Equal(t, http.StatusOK, res.StatusCode)
+	})
+
+	t.Run("it_should_use_custom_http_client_when_provided", func(t *testing.T) {
+		var transportUsed bool
+		customTransport := &recordingTransport{
+			wrapped:     http.DefaultTransport,
+			onRoundTrip: func() { transportUsed = true },
+		}
+		customClient := &http.Client{Transport: customTransport}
+
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer ts.Close()
+
+		r := NewRequester().WithHTTPClient(customClient).Load()
+		_, err := r.Get(RequestEntity{Endpoint: ts.URL})
+
+		assert.NoError(t, err)
+		assert.True(t, transportUsed)
 	})
 
 	t.Run("it_should_override_Requester_level_header_if_RequestEntity_headers_set", func(t *testing.T) {

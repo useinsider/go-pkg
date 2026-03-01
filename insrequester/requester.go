@@ -40,6 +40,7 @@ type Requester interface {
 	WithRetry(config RetryConfig) *Request
 	WithCircuitbreaker(config CircuitBreakerConfig) *Request
 	WithTimeout(timeout time.Duration) *Request
+	WithHTTPClient(client *http.Client) *Request
 	WithHeaders(headers Headers) *Request
 	Load() *Request
 }
@@ -55,6 +56,7 @@ type RequestEntity struct {
 
 type Request struct {
 	timeout     time.Duration
+	httpClient  *http.Client
 	runner      goresilience.Runner
 	middlewares []goresilience.Middleware
 	headers     Headers
@@ -103,7 +105,15 @@ func (r *Request) sendRequest(httpMethod string, re RequestEntity) (*http.Respon
 		re.Headers = append(r.headers, re.Headers...) // RequestEntity headers will override Requester level headers.
 		re.applyHeadersToRequest(req)
 
-		res, outerErr = (&http.Client{Timeout: r.timeout}).Do(req)
+		client := r.httpClient
+		if client == nil {
+			client = &http.Client{Timeout: r.timeout}
+		} else if r.timeout > 0 {
+			cp := *client
+			cp.Timeout = r.timeout
+			client = &cp
+		}
+		res, outerErr = client.Do(req)
 		if outerErr != nil {
 			return ErrRetryable
 		}
@@ -207,6 +217,11 @@ func (r *Request) WithCircuitbreaker(config CircuitBreakerConfig) *Request {
 	})
 	r.middlewares = append(r.middlewares, mw)
 
+	return r
+}
+
+func (r *Request) WithHTTPClient(client *http.Client) *Request {
+	r.httpClient = client
 	return r
 }
 

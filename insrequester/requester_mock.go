@@ -123,6 +123,20 @@ func (mr *MockRequesterMockRecorder) WithCircuitbreaker(config interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithCircuitbreaker", reflect.TypeOf((*MockRequester)(nil).WithCircuitbreaker), config)
 }
 
+// WithHTTPClient mocks base method.
+func (m *MockRequester) WithHTTPClient(client *http.Client) *Request {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WithHTTPClient", client)
+	ret0, _ := ret[0].(*Request)
+	return ret0
+}
+
+// WithHTTPClient indicates an expected call of WithHTTPClient.
+func (mr *MockRequesterMockRecorder) WithHTTPClient(client interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithHTTPClient", reflect.TypeOf((*MockRequester)(nil).WithHTTPClient), client)
+}
+
 // WithHeaders mocks base method.
 func (m *MockRequester) WithHeaders(headers Headers) *Request {
 	m.ctrl.T.Helper()
