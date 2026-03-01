@@ -20,8 +20,6 @@ import (
 	"time"
 )
 
-var tracer = otel.Tracer("insrequester")
-
 // NewRequester ...
 func NewRequester() Requester {
 	return &Request{}
@@ -91,6 +89,8 @@ func (r *Request) Delete(ctx context.Context, re RequestEntity) (*http.Response,
 }
 
 func (r *Request) sendRequest(ctx context.Context, httpMethod string, re RequestEntity) (*http.Response, error) {
+	tracer := otel.Tracer("insrequester")
+
 	spanName := httpMethod
 	if parsed, err := url.Parse(re.Endpoint); err == nil {
 		spanName = httpMethod + " " + parsed.Host + parsed.Path
@@ -113,11 +113,11 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 		r.runner = goresilience.RunnerChain(r.middlewares...)
 	}
 
-	runnerErr := r.runner.Run(ctx, func(_ context.Context) error {
+	runnerErr := r.runner.Run(ctx, func(attemptCtx context.Context) error {
 		attempt++
 		var req *http.Request
 
-		req, outerErr = http.NewRequestWithContext(ctx, httpMethod, re.Endpoint, bytes.NewReader(re.Body))
+		req, outerErr = http.NewRequestWithContext(attemptCtx, httpMethod, re.Endpoint, bytes.NewReader(re.Body))
 		if outerErr != nil {
 			res = nil
 			return nil
@@ -201,22 +201,6 @@ func (r RequestEntity) applyHeadersToRequest(request *http.Request) {
 			}
 		}
 	}
-}
-
-func (r *Request) getResponseBody(res *http.Response) string {
-	if res.Body == nil {
-		return res.Status
-	}
-
-	defer res.Body.Close()
-
-	bodyBytes, err := io.ReadAll(res.Body)
-
-	if err != nil {
-		return fmt.Sprintf("%s : %v", res.Status, ErrReadingBody)
-	}
-
-	return fmt.Sprintf("%s : %s", res.Status, string(bodyBytes))
 }
 
 func (r *Request) WithRetry(config RetryConfig) *Request {
