@@ -5,6 +5,7 @@
 package insrequester
 
 import (
+	context "context"
 	http "net/http"
 	reflect "reflect"
 	time "time"
@@ -36,33 +37,33 @@ func (m *MockRequester) EXPECT() *MockRequesterMockRecorder {
 }
 
 // Delete mocks base method.
-func (m *MockRequester) Delete(re RequestEntity) (*http.Response, error) {
+func (m *MockRequester) Delete(ctx context.Context, re RequestEntity) (*http.Response, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Delete", re)
+	ret := m.ctrl.Call(m, "Delete", ctx, re)
 	ret0, _ := ret[0].(*http.Response)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Delete indicates an expected call of Delete.
-func (mr *MockRequesterMockRecorder) Delete(re interface{}) *gomock.Call {
+func (mr *MockRequesterMockRecorder) Delete(ctx, re interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockRequester)(nil).Delete), re)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockRequester)(nil).Delete), ctx, re)
 }
 
 // Get mocks base method.
-func (m *MockRequester) Get(re RequestEntity) (*http.Response, error) {
+func (m *MockRequester) Get(ctx context.Context, re RequestEntity) (*http.Response, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Get", re)
+	ret := m.ctrl.Call(m, "Get", ctx, re)
 	ret0, _ := ret[0].(*http.Response)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Get indicates an expected call of Get.
-func (mr *MockRequesterMockRecorder) Get(re interface{}) *gomock.Call {
+func (mr *MockRequesterMockRecorder) Get(ctx, re interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockRequester)(nil).Get), re)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockRequester)(nil).Get), ctx, re)
 }
 
 // Load mocks base method.
@@ -80,33 +81,33 @@ func (mr *MockRequesterMockRecorder) Load() *gomock.Call {
 }
 
 // Post mocks base method.
-func (m *MockRequester) Post(re RequestEntity) (*http.Response, error) {
+func (m *MockRequester) Post(ctx context.Context, re RequestEntity) (*http.Response, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Post", re)
+	ret := m.ctrl.Call(m, "Post", ctx, re)
 	ret0, _ := ret[0].(*http.Response)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Post indicates an expected call of Post.
-func (mr *MockRequesterMockRecorder) Post(re interface{}) *gomock.Call {
+func (mr *MockRequesterMockRecorder) Post(ctx, re interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Post", reflect.TypeOf((*MockRequester)(nil).Post), re)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Post", reflect.TypeOf((*MockRequester)(nil).Post), ctx, re)
 }
 
 // Put mocks base method.
-func (m *MockRequester) Put(re RequestEntity) (*http.Response, error) {
+func (m *MockRequester) Put(ctx context.Context, re RequestEntity) (*http.Response, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Put", re)
+	ret := m.ctrl.Call(m, "Put", ctx, re)
 	ret0, _ := ret[0].(*http.Response)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Put indicates an expected call of Put.
-func (mr *MockRequesterMockRecorder) Put(re interface{}) *gomock.Call {
+func (mr *MockRequesterMockRecorder) Put(ctx, re interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Put", reflect.TypeOf((*MockRequester)(nil).Put), re)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Put", reflect.TypeOf((*MockRequester)(nil).Put), ctx, re)
 }
 
 // WithCircuitbreaker mocks base method.

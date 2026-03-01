@@ -33,10 +33,10 @@ type RetryConfig struct {
 // Requester represent the package structure, with creating exactly the same interface your own codebase you can
 // easily mock the functions inside this package while writing unit tests.
 type Requester interface {
-	Get(re RequestEntity) (*http.Response, error)
-	Post(re RequestEntity) (*http.Response, error)
-	Put(re RequestEntity) (*http.Response, error)
-	Delete(re RequestEntity) (*http.Response, error)
+	Get(ctx context.Context, re RequestEntity) (*http.Response, error)
+	Post(ctx context.Context, re RequestEntity) (*http.Response, error)
+	Put(ctx context.Context, re RequestEntity) (*http.Response, error)
+	Delete(ctx context.Context, re RequestEntity) (*http.Response, error)
 	WithRetry(config RetryConfig) *Request
 	WithCircuitbreaker(config CircuitBreakerConfig) *Request
 	WithTimeout(timeout time.Duration) *Request
@@ -63,26 +63,26 @@ type Request struct {
 }
 
 // Get sends HTTP get request to the given endpoint and returns *http.Response and an error.
-func (r *Request) Get(re RequestEntity) (*http.Response, error) {
-	return r.sendRequest(http.MethodGet, re)
+func (r *Request) Get(ctx context.Context, re RequestEntity) (*http.Response, error) {
+	return r.sendRequest(ctx, http.MethodGet, re)
 }
 
 // Post sends HTTP post request to the given endpoint and returns *http.Response and an error.
-func (r *Request) Post(re RequestEntity) (*http.Response, error) {
-	return r.sendRequest(http.MethodPost, re)
+func (r *Request) Post(ctx context.Context, re RequestEntity) (*http.Response, error) {
+	return r.sendRequest(ctx, http.MethodPost, re)
 }
 
 // Put sends HTTP put request to the given endpoint and returns *http.Response and an error.
-func (r *Request) Put(re RequestEntity) (*http.Response, error) {
-	return r.sendRequest(http.MethodPut, re)
+func (r *Request) Put(ctx context.Context, re RequestEntity) (*http.Response, error) {
+	return r.sendRequest(ctx, http.MethodPut, re)
 }
 
 // Delete sends HTTP put request to the given endpoint and returns *http.Response and an error.
-func (r *Request) Delete(re RequestEntity) (*http.Response, error) {
-	return r.sendRequest(http.MethodDelete, re)
+func (r *Request) Delete(ctx context.Context, re RequestEntity) (*http.Response, error) {
+	return r.sendRequest(ctx, http.MethodDelete, re)
 }
 
-func (r *Request) sendRequest(httpMethod string, re RequestEntity) (*http.Response, error) {
+func (r *Request) sendRequest(ctx context.Context, httpMethod string, re RequestEntity) (*http.Response, error) {
 	var (
 		res      *http.Response
 		outerErr error
@@ -92,10 +92,10 @@ func (r *Request) sendRequest(httpMethod string, re RequestEntity) (*http.Respon
 		r.runner = goresilience.RunnerChain(r.middlewares...)
 	}
 
-	runnerErr := r.runner.Run(context.TODO(), func(ctx context.Context) error {
+	runnerErr := r.runner.Run(ctx, func(_ context.Context) error {
 		var req *http.Request
 
-		req, outerErr = http.NewRequest(httpMethod, re.Endpoint, bytes.NewReader(re.Body))
+		req, outerErr = http.NewRequestWithContext(ctx, httpMethod, re.Endpoint, bytes.NewReader(re.Body))
 		if outerErr != nil {
 			res = nil
 			return nil

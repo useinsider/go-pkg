@@ -1,11 +1,13 @@
 package insrequester
 
 import (
-	"github.com/stretchr/testify/assert"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type recordingTransport struct {
@@ -28,7 +30,7 @@ func TestRequest_Get(t *testing.T) {
 
 		r := NewRequester()
 
-		res, err := r.Get(RequestEntity{Endpoint: ts.URL})
+		res, err := r.Get(context.Background(), RequestEntity{Endpoint: ts.URL})
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, res.StatusCode)
 	})
@@ -51,7 +53,7 @@ func TestRequest_Get(t *testing.T) {
 		req := RequestEntity{
 			Endpoint: server.URL,
 		}
-		_, _ = r.Get(req)
+		_, _ = r.Get(context.Background(), req)
 
 		assert.Equal(t, 4, retryTimes)
 	})
@@ -77,7 +79,7 @@ func TestRequest_Get(t *testing.T) {
 		req := RequestEntity{
 			Endpoint: server.URL,
 		}
-		_, _ = r.Get(req)
+		_, _ = r.Get(context.Background(), req)
 
 		assert.Equal(t, 4, retryTimes)
 	})
@@ -98,9 +100,9 @@ func TestRequest_Get(t *testing.T) {
 		var err error
 		req := RequestEntity{Endpoint: ts.URL}
 		for i := 0; i < minimumRequestToOpen; i++ {
-			_, _ = r.Get(req)
+			_, _ = r.Get(context.Background(), req)
 		}
-		_, err = r.Get(req)
+		_, err = r.Get(context.Background(), req)
 		assert.ErrorIs(t, err, ErrCircuitBreakerOpen)
 	})
 
@@ -125,7 +127,7 @@ func TestRequest_Get(t *testing.T) {
 		var err error
 		req := RequestEntity{Endpoint: ts.URL}
 
-		_, err = r.Get(req)
+		_, err = r.Get(context.Background(), req)
 		assert.ErrorIs(t, err, ErrCircuitBreakerOpen)
 		assert.Contains(t, err.Error(), "{\"status\": \"FAILED\"}")
 	})
@@ -142,7 +144,7 @@ func TestRequest_Get(t *testing.T) {
 
 		userAgent := "test-user-agent"
 		r := NewRequester().WithHeaders(Headers{{"User-Agent": userAgent}})
-		res, err := r.Get(RequestEntity{Endpoint: ts.URL})
+		res, err := r.Get(context.Background(), RequestEntity{Endpoint: ts.URL})
 
 		assert.NoError(t, err)
 		assert.Equal(t, receivedUserAgent, userAgent)
@@ -163,7 +165,7 @@ func TestRequest_Get(t *testing.T) {
 		defer ts.Close()
 
 		r := NewRequester().WithHTTPClient(customClient).Load()
-		_, err := r.Get(RequestEntity{Endpoint: ts.URL})
+		_, err := r.Get(context.Background(), RequestEntity{Endpoint: ts.URL})
 
 		assert.NoError(t, err)
 		assert.True(t, transportUsed)
@@ -187,7 +189,7 @@ func TestRequest_Get(t *testing.T) {
 			Endpoint: ts.URL,
 			Headers:  Headers{{"User-Agent": newUserAgent}},
 		}
-		res, err := r.Get(req)
+		res, err := r.Get(context.Background(), req)
 
 		assert.NoError(t, err)
 		assert.Equal(t, receivedUserAgent, newUserAgent)
