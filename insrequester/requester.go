@@ -4,15 +4,23 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
+
 	"github.com/pkg/errors"
 	"github.com/slok/goresilience"
 	"github.com/slok/goresilience/circuitbreaker"
 	goresilienceErrors "github.com/slok/goresilience/errors"
 	"github.com/slok/goresilience/retry"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"io"
 	"net/http"
 	"time"
 )
+
+var tracer = otel.Tracer("insrequester")
 
 // NewRequester ...
 func NewRequester() Requester {
@@ -83,9 +91,22 @@ func (r *Request) Delete(ctx context.Context, re RequestEntity) (*http.Response,
 }
 
 func (r *Request) sendRequest(ctx context.Context, httpMethod string, re RequestEntity) (*http.Response, error) {
+	spanName := httpMethod
+	if parsed, err := url.Parse(re.Endpoint); err == nil {
+		spanName = httpMethod + " " + parsed.Host + parsed.Path
+	}
+
+	ctx, span := tracer.Start(ctx, spanName, trace.WithAttributes(
+		attribute.String("http.request.method", httpMethod),
+		attribute.String("url.full", re.Endpoint),
+	))
+	defer span.End()
+
 	var (
-		res      *http.Response
-		outerErr error
+		res          *http.Response
+		outerErr     error
+		attempt      int
+		lastErrBody  string
 	)
 
 	if r.runner == nil {
@@ -93,6 +114,7 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 	}
 
 	runnerErr := r.runner.Run(ctx, func(_ context.Context) error {
+		attempt++
 		var req *http.Request
 
 		req, outerErr = http.NewRequestWithContext(ctx, httpMethod, re.Endpoint, bytes.NewReader(re.Body))
@@ -121,28 +143,45 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 		if res.StatusCode >= 100 && res.StatusCode < 200 ||
 			res.StatusCode == 429 ||
 			res.StatusCode >= 500 && res.StatusCode <= 599 {
+			bodyBytes, _ := io.ReadAll(res.Body)
+			res.Body.Close()
+			if len(bodyBytes) > 0 {
+				lastErrBody = fmt.Sprintf("%s : %s", res.Status, string(bodyBytes))
+			} else {
+				lastErrBody = res.Status
+			}
 			return ErrRetryable
 		}
 
 		return nil
 	})
 
+	span.SetAttributes(attribute.Int("http.resend_count", attempt-1))
+
 	if runnerErr == goresilienceErrors.ErrCircuitOpen {
+		span.SetStatus(codes.Error, "circuit breaker open")
 		if outerErr != nil {
 			return nil, errors.Wrap(ErrCircuitBreakerOpen, outerErr.Error())
 		}
-		if res != nil {
-			return nil, errors.Wrap(ErrCircuitBreakerOpen, r.getResponseBody(res))
+		if lastErrBody != "" {
+			return nil, errors.Wrap(ErrCircuitBreakerOpen, lastErrBody)
 		}
 		return nil, ErrCircuitBreakerOpen
 	}
 
 	if runnerErr == goresilienceErrors.ErrTimeout {
+		span.SetStatus(codes.Error, "timeout")
 		return nil, ErrTimeout
 	}
 
 	if outerErr != nil {
+		span.RecordError(outerErr)
+		span.SetStatus(codes.Error, outerErr.Error())
 		return nil, outerErr
+	}
+
+	if res != nil {
+		span.SetAttributes(attribute.Int("http.response.status_code", res.StatusCode))
 	}
 
 	return res, nil
