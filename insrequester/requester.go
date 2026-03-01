@@ -20,6 +20,8 @@ import (
 	"time"
 )
 
+var tracer = otel.Tracer("insrequester")
+
 // NewRequester ...
 func NewRequester() Requester {
 	return &Request{}
@@ -89,8 +91,6 @@ func (r *Request) Delete(ctx context.Context, re RequestEntity) (*http.Response,
 }
 
 func (r *Request) sendRequest(ctx context.Context, httpMethod string, re RequestEntity) (*http.Response, error) {
-	tracer := otel.Tracer("insrequester")
-
 	spanName := httpMethod
 	if parsed, err := url.Parse(re.Endpoint); err == nil {
 		spanName = httpMethod + " " + parsed.Host + parsed.Path
