@@ -143,10 +143,20 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 		if res.StatusCode >= 100 && res.StatusCode < 200 ||
 			res.StatusCode == 429 ||
 			res.StatusCode >= 500 && res.StatusCode <= 599 {
-			bodyBytes, _ := io.ReadAll(res.Body)
+			const maxErrBodySize = 4096
+			limitedReader := io.LimitReader(res.Body, maxErrBodySize+1)
+			bodyBytes, _ := io.ReadAll(limitedReader)
 			res.Body.Close()
+			truncated := len(bodyBytes) > maxErrBodySize
+			if truncated {
+				bodyBytes = bodyBytes[:maxErrBodySize]
+			}
 			if len(bodyBytes) > 0 {
-				lastErrBody = fmt.Sprintf("%s : %s", res.Status, string(bodyBytes))
+				msg := fmt.Sprintf("%s : %s", res.Status, string(bodyBytes))
+				if truncated {
+					msg += " [truncated]"
+				}
+				lastErrBody = msg
 			} else {
 				lastErrBody = res.Status
 			}
@@ -156,7 +166,11 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 		return nil
 	})
 
-	span.SetAttributes(attribute.Int("http.resend_count", attempt-1))
+	resendCount := 0
+	if attempt > 0 {
+		resendCount = attempt - 1
+	}
+	span.SetAttributes(attribute.Int("http.resend_count", resendCount))
 
 	if runnerErr == goresilienceErrors.ErrCircuitOpen {
 		span.SetStatus(codes.Error, "circuit breaker open")
@@ -178,6 +192,14 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 		span.RecordError(outerErr)
 		span.SetStatus(codes.Error, outerErr.Error())
 		return nil, outerErr
+	}
+
+	if runnerErr != nil {
+		span.SetStatus(codes.Error, "retries exhausted")
+		if lastErrBody != "" {
+			return nil, errors.Wrap(ErrRetriesExhausted, lastErrBody)
+		}
+		return nil, ErrRetriesExhausted
 	}
 
 	if res != nil {
