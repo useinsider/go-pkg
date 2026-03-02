@@ -4,15 +4,23 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
+
 	"github.com/pkg/errors"
 	"github.com/slok/goresilience"
 	"github.com/slok/goresilience/circuitbreaker"
 	goresilienceErrors "github.com/slok/goresilience/errors"
 	"github.com/slok/goresilience/retry"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"io"
 	"net/http"
 	"time"
 )
+
+var tracer = otel.Tracer("insrequester")
 
 // NewRequester ...
 func NewRequester() Requester {
@@ -33,13 +41,14 @@ type RetryConfig struct {
 // Requester represent the package structure, with creating exactly the same interface your own codebase you can
 // easily mock the functions inside this package while writing unit tests.
 type Requester interface {
-	Get(re RequestEntity) (*http.Response, error)
-	Post(re RequestEntity) (*http.Response, error)
-	Put(re RequestEntity) (*http.Response, error)
-	Delete(re RequestEntity) (*http.Response, error)
+	Get(ctx context.Context, re RequestEntity) (*http.Response, error)
+	Post(ctx context.Context, re RequestEntity) (*http.Response, error)
+	Put(ctx context.Context, re RequestEntity) (*http.Response, error)
+	Delete(ctx context.Context, re RequestEntity) (*http.Response, error)
 	WithRetry(config RetryConfig) *Request
 	WithCircuitbreaker(config CircuitBreakerConfig) *Request
 	WithTimeout(timeout time.Duration) *Request
+	WithHTTPClient(client *http.Client) *Request
 	WithHeaders(headers Headers) *Request
 	Load() *Request
 }
@@ -55,45 +64,60 @@ type RequestEntity struct {
 
 type Request struct {
 	timeout     time.Duration
+	httpClient  *http.Client
 	runner      goresilience.Runner
 	middlewares []goresilience.Middleware
 	headers     Headers
 }
 
 // Get sends HTTP get request to the given endpoint and returns *http.Response and an error.
-func (r *Request) Get(re RequestEntity) (*http.Response, error) {
-	return r.sendRequest(http.MethodGet, re)
+func (r *Request) Get(ctx context.Context, re RequestEntity) (*http.Response, error) {
+	return r.sendRequest(ctx, http.MethodGet, re)
 }
 
 // Post sends HTTP post request to the given endpoint and returns *http.Response and an error.
-func (r *Request) Post(re RequestEntity) (*http.Response, error) {
-	return r.sendRequest(http.MethodPost, re)
+func (r *Request) Post(ctx context.Context, re RequestEntity) (*http.Response, error) {
+	return r.sendRequest(ctx, http.MethodPost, re)
 }
 
 // Put sends HTTP put request to the given endpoint and returns *http.Response and an error.
-func (r *Request) Put(re RequestEntity) (*http.Response, error) {
-	return r.sendRequest(http.MethodPut, re)
+func (r *Request) Put(ctx context.Context, re RequestEntity) (*http.Response, error) {
+	return r.sendRequest(ctx, http.MethodPut, re)
 }
 
 // Delete sends HTTP put request to the given endpoint and returns *http.Response and an error.
-func (r *Request) Delete(re RequestEntity) (*http.Response, error) {
-	return r.sendRequest(http.MethodDelete, re)
+func (r *Request) Delete(ctx context.Context, re RequestEntity) (*http.Response, error) {
+	return r.sendRequest(ctx, http.MethodDelete, re)
 }
 
-func (r *Request) sendRequest(httpMethod string, re RequestEntity) (*http.Response, error) {
+func (r *Request) sendRequest(ctx context.Context, httpMethod string, re RequestEntity) (*http.Response, error) {
+	spanName := httpMethod
+	if parsed, err := url.Parse(re.Endpoint); err == nil {
+		spanName = httpMethod + " " + parsed.Host + parsed.Path
+	}
+
+	ctx, span := tracer.Start(ctx, spanName, trace.WithAttributes(
+		attribute.String("http.request.method", httpMethod),
+		attribute.String("url.full", re.Endpoint),
+	))
+	defer span.End()
+
 	var (
-		res      *http.Response
-		outerErr error
+		res          *http.Response
+		outerErr     error
+		attempt      int
+		lastErrBody  string
 	)
 
 	if r.runner == nil {
 		r.runner = goresilience.RunnerChain(r.middlewares...)
 	}
 
-	runnerErr := r.runner.Run(context.TODO(), func(ctx context.Context) error {
+	runnerErr := r.runner.Run(ctx, func(attemptCtx context.Context) error {
+		attempt++
 		var req *http.Request
 
-		req, outerErr = http.NewRequest(httpMethod, re.Endpoint, bytes.NewReader(re.Body))
+		req, outerErr = http.NewRequestWithContext(attemptCtx, httpMethod, re.Endpoint, bytes.NewReader(re.Body))
 		if outerErr != nil {
 			res = nil
 			return nil
@@ -103,7 +127,15 @@ func (r *Request) sendRequest(httpMethod string, re RequestEntity) (*http.Respon
 		re.Headers = append(r.headers, re.Headers...) // RequestEntity headers will override Requester level headers.
 		re.applyHeadersToRequest(req)
 
-		res, outerErr = (&http.Client{Timeout: r.timeout}).Do(req)
+		client := r.httpClient
+		if client == nil {
+			client = &http.Client{Timeout: r.timeout}
+		} else if r.timeout > 0 {
+			cp := *client
+			cp.Timeout = r.timeout
+			client = &cp
+		}
+		res, outerErr = client.Do(req)
 		if outerErr != nil {
 			return ErrRetryable
 		}
@@ -111,28 +143,67 @@ func (r *Request) sendRequest(httpMethod string, re RequestEntity) (*http.Respon
 		if res.StatusCode >= 100 && res.StatusCode < 200 ||
 			res.StatusCode == 429 ||
 			res.StatusCode >= 500 && res.StatusCode <= 599 {
+			const maxErrBodySize = 4096
+			limitedReader := io.LimitReader(res.Body, maxErrBodySize+1)
+			bodyBytes, _ := io.ReadAll(limitedReader)
+			res.Body.Close()
+			truncated := len(bodyBytes) > maxErrBodySize
+			if truncated {
+				bodyBytes = bodyBytes[:maxErrBodySize]
+			}
+			if len(bodyBytes) > 0 {
+				msg := fmt.Sprintf("%s : %s", res.Status, string(bodyBytes))
+				if truncated {
+					msg += " [truncated]"
+				}
+				lastErrBody = msg
+			} else {
+				lastErrBody = res.Status
+			}
 			return ErrRetryable
 		}
 
 		return nil
 	})
 
+	resendCount := 0
+	if attempt > 0 {
+		resendCount = attempt - 1
+	}
+	span.SetAttributes(attribute.Int("http.resend_count", resendCount))
+
 	if runnerErr == goresilienceErrors.ErrCircuitOpen {
+		span.SetStatus(codes.Error, "circuit breaker open")
 		if outerErr != nil {
 			return nil, errors.Wrap(ErrCircuitBreakerOpen, outerErr.Error())
 		}
-		if res != nil {
-			return nil, errors.Wrap(ErrCircuitBreakerOpen, r.getResponseBody(res))
+		if lastErrBody != "" {
+			return nil, errors.Wrap(ErrCircuitBreakerOpen, lastErrBody)
 		}
 		return nil, ErrCircuitBreakerOpen
 	}
 
 	if runnerErr == goresilienceErrors.ErrTimeout {
+		span.SetStatus(codes.Error, "timeout")
 		return nil, ErrTimeout
 	}
 
 	if outerErr != nil {
+		span.RecordError(outerErr)
+		span.SetStatus(codes.Error, outerErr.Error())
 		return nil, outerErr
+	}
+
+	if runnerErr != nil {
+		span.SetStatus(codes.Error, "retries exhausted")
+		if lastErrBody != "" {
+			return nil, errors.Wrap(ErrRetriesExhausted, lastErrBody)
+		}
+		return nil, ErrRetriesExhausted
+	}
+
+	if res != nil {
+		span.SetAttributes(attribute.Int("http.response.status_code", res.StatusCode))
 	}
 
 	return res, nil
@@ -152,22 +223,6 @@ func (r RequestEntity) applyHeadersToRequest(request *http.Request) {
 			}
 		}
 	}
-}
-
-func (r *Request) getResponseBody(res *http.Response) string {
-	if res.Body == nil {
-		return res.Status
-	}
-
-	defer res.Body.Close()
-
-	bodyBytes, err := io.ReadAll(res.Body)
-
-	if err != nil {
-		return fmt.Sprintf("%s : %v", res.Status, ErrReadingBody)
-	}
-
-	return fmt.Sprintf("%s : %s", res.Status, string(bodyBytes))
 }
 
 func (r *Request) WithRetry(config RetryConfig) *Request {
@@ -207,6 +262,11 @@ func (r *Request) WithCircuitbreaker(config CircuitBreakerConfig) *Request {
 	})
 	r.middlewares = append(r.middlewares, mw)
 
+	return r
+}
+
+func (r *Request) WithHTTPClient(client *http.Client) *Request {
+	r.httpClient = client
 	return r
 }
 
