@@ -45,5 +45,17 @@ git push origin <module>/v1.0.1
 gh release create <module>/v1.0.1 --title "<module> v1.0.1" --notes "Description"
 ```
 
+## Claude Code Automations
+
+**Agents** (subagents for review tasks):
+- `.claude/agents/code-reviewer.md` — Reviews for API consistency, module independence, backward compatibility
+
+**Skills** (invoke with `/skill-name`):
+- `/add-package <name>` — Scaffold a new `ins*` package with go.mod, interface, tests, README
+- `/release-package <package> <version>` — Release workflow with dependency chain awareness
+
+**Hooks** (automatic):
+- Go files auto-formatted with `gofmt` on edit
+
 ## Testing
 Tests use `testify` for assertions and `go-sqlmock`/mocks for database testing. Run tests per-package, not from the repo root.
