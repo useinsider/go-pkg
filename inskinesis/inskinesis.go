@@ -250,7 +250,13 @@ func (s *stream) sendSingleBatch(batch []interface{}, concurrentLimiter chan str
 		}()
 
 		failedCount, err := s.PutRecords(batch)
+
+		// Guard failedCount: concurrent goroutines write to it simultaneously
+		// without synchronisation, causing a data race.
+		s.mu.Lock()
 		s.failedCount += failedCount
+		s.mu.Unlock()
+
 		if err != nil {
 			s.printf("Error sending records to Kinesis stream %s: %v\n", s.name, err)
 			if len(s.errChannel) < errorChannelSize {
@@ -327,7 +333,8 @@ func (s *stream) putRecords(batch []*kinesis.PutRecordsRequestEntry, retryCount 
 }
 
 func (s *stream) transformRecords(records []interface{}) ([]*kinesis.PutRecordsRequestEntry, error) {
-	var transformedRecords []*kinesis.PutRecordsRequestEntry
+	// Pre-allocate to avoid repeated backing-array reallocations on large batches.
+	transformedRecords := make([]*kinesis.PutRecordsRequestEntry, 0, len(records))
 	failedRecords := 0
 	var err error
 	var js []byte
@@ -364,7 +371,8 @@ func getFailedRecords(response *kinesis.PutRecordsOutput, records []*kinesis.Put
 }
 
 func (s *stream) wrapWithPutRecordsRequestEntry(records [][]byte) []*kinesis.PutRecordsRequestEntry {
-	var transformedRecords []*kinesis.PutRecordsRequestEntry
+	// Pre-allocate to avoid repeated backing-array reallocations on large batches.
+	transformedRecords := make([]*kinesis.PutRecordsRequestEntry, 0, len(records))
 
 	for _, record := range records {
 		transformedRecords = append(transformedRecords, &kinesis.PutRecordsRequestEntry{

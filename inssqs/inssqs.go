@@ -388,7 +388,13 @@ func doConcurrently[T any](batches [][]T, workers int, retryCount int, f func([]
 
 	concurrentLimiter := make(chan struct{}, workers)
 	wg := sync.WaitGroup{}
-	var outerErr error
+
+	// errMu guards outerErr: multiple goroutines may write concurrently and an
+	// unsynchronised write is a data race that causes undefined behaviour.
+	var (
+		outerErr   error
+		errMu      sync.Mutex
+	)
 	failedEntriesChan := make(chan []T)
 
 	for _, batch := range batches {
@@ -399,7 +405,9 @@ func doConcurrently[T any](batches [][]T, workers int, retryCount int, f func([]
 			defer func() { <-concurrentLimiter }()
 			fe, err := f(b, retryCount+1)
 			if err != nil {
+				errMu.Lock()
 				outerErr = err
+				errMu.Unlock()
 			}
 			failedEntriesChan <- fe
 		}(batch)

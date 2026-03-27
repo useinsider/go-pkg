@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/slok/goresilience"
@@ -15,9 +18,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-	"io"
-	"net/http"
-	"time"
 )
 
 var tracer = otel.Tracer("insrequester")
@@ -103,29 +103,36 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 	defer span.End()
 
 	var (
-		res          *http.Response
-		outerErr     error
-		attempt      int
-		lastErrBody  string
+		res         *http.Response
+		outerErr    error
+		attempt     int
+		lastErrBody string
 	)
 
 	if r.runner == nil {
 		r.runner = goresilience.RunnerChain(r.middlewares...)
 	}
 
+	// Headers are merged once before the retry loop; merging inside the closure
+	// would prepend r.headers on every attempt, growing the slice indefinitely.
+	mergedEntity := re
+	mergedEntity.Headers = append(append(Headers(nil), r.headers...), re.Headers...)
+
 	runnerErr := r.runner.Run(ctx, func(attemptCtx context.Context) error {
 		attempt++
 		var req *http.Request
 
-		req, outerErr = http.NewRequestWithContext(attemptCtx, httpMethod, re.Endpoint, bytes.NewReader(re.Body))
+		req, outerErr = http.NewRequestWithContext(attemptCtx, httpMethod, mergedEntity.Endpoint, bytes.NewReader(mergedEntity.Body))
 		if outerErr != nil {
 			res = nil
-			return nil
+			// Returning the error (not nil) lets goresilience count this as a
+			// failure so the circuit breaker reflects the real error rate.
+			// Retrying is pointless: a malformed URL will never succeed.
+			return outerErr
 		}
 
 		req.Close = true
-		re.Headers = append(r.headers, re.Headers...) // RequestEntity headers will override Requester level headers.
-		re.applyHeadersToRequest(req)
+		mergedEntity.applyHeadersToRequest(req)
 
 		client := r.httpClient
 		if client == nil {
@@ -137,6 +144,11 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 		}
 		res, outerErr = client.Do(req)
 		if outerErr != nil {
+			// Do not retry on context cancellation or deadline: the caller has
+			// already abandoned the request, so further attempts are wasteful.
+			if errors.Is(outerErr, context.Canceled) || errors.Is(outerErr, context.DeadlineExceeded) {
+				return outerErr
+			}
 			return ErrRetryable
 		}
 
@@ -210,7 +222,10 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 }
 
 func (r RequestEntity) applyHeadersToRequest(request *http.Request) {
-	if request.Body != nil {
+	// http.NewRequestWithContext sets request.Body to http.NoBody (not nil) for
+	// empty readers, so request.Body != nil is always true. Check the raw slice
+	// to avoid sending Content-Type on bodyless requests such as GET.
+	if len(r.Body) > 0 {
 		request.Header.Set("Content-Type", "application/json")
 	}
 
