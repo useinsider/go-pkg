@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"io"
 	"net/http"
@@ -96,7 +97,7 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 		spanName = httpMethod + " " + parsed.Host + parsed.Path
 	}
 
-	ctx, span := tracer.Start(ctx, spanName, trace.WithAttributes(
+	ctx, span := tracer.Start(ctx, spanName, trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(
 		attribute.String("http.request.method", httpMethod),
 		attribute.String("url.full", re.Endpoint),
 	))
@@ -124,6 +125,7 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 		}
 
 		req.Close = true
+		otel.GetTextMapPropagator().Inject(attemptCtx, propagation.HeaderCarrier(req.Header))
 		re.Headers = append(r.headers, re.Headers...) // RequestEntity headers will override Requester level headers.
 		re.applyHeadersToRequest(req)
 
