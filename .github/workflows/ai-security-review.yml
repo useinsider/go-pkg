@@ -1,99 +1,12 @@
-name: Security Review
+name: AI Security Review
 
 on:
-    pull_request:
-        types:
-            - opened
-            - synchronize
-            - reopened
-            - ready_for_review
-            - closed
-    issue_comment:
-        types: [created]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, closed]
+  issue_comment:
+    types: [created]
 
 jobs:
-    security-review:
-        if: >-
-            (github.event_name == 'pull_request' && github.event.action != 'closed') ||
-            (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
-             contains(github.event.comment.body, '/ai-security:review'))
-        runs-on: self-runner-node
-        steps:
-            - name: Resolve PR URL
-              id: pr
-              env:
-                  EVENT_NAME: ${{ github.event_name }}
-                  PR_HTML_URL: ${{ github.event.pull_request.html_url }}
-                  ISSUE_PR_URL: ${{ github.event.issue.pull_request.html_url }}
-              run: |
-                  if [ "$EVENT_NAME" = "issue_comment" ]; then
-                    echo "url=$ISSUE_PR_URL" >> $GITHUB_OUTPUT
-                  else
-                    echo "url=$PR_HTML_URL" >> $GITHUB_OUTPUT
-                  fi
-
-            - name: Trigger security review
-              run: |
-                  HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-                    --connect-timeout 10 --max-time 300 \
-                    --location 'https://0wu8075cd8.execute-api.eu-west-1.amazonaws.com/prod/review' \
-                    --header 'Content-Type: application/json' \
-                    --data "{\"pr_url\":\"${{ steps.pr.outputs.url }}\"}")
-
-                  if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
-                    echo "::error::Security review request failed with HTTP $HTTP_STATUS"
-                    exit 1
-                  fi
-
-            - name: Trigger BlackDuck scan
-              if: github.event_name == 'pull_request'
-              env:
-                  PR_BRANCH: ${{ github.event.pull_request.head.ref }}
-                  PR_TITLE: ${{ github.event.pull_request.title }}
-                  PR_COMMENTS_URL: ${{ github.event.pull_request.comments_url }}
-                  PR_API_URL: ${{ github.event.pull_request.url }}
-                  OWNER_REPO_NAME: ${{ github.event.repository.full_name }}
-                  REPO_NAME: ${{ github.event.repository.name }}
-                  PR_NUMBER: ${{ github.event.pull_request.number }}
-              run: |
-                  TASK_KEY=$(echo "$PR_BRANCH" | grep -oiE '[A-Z][A-Z0-9]+-[0-9]+' | head -1)
-                  if [ -z "$TASK_KEY" ]; then
-                    TASK_KEY=$(echo "$PR_TITLE" | grep -oiE '[A-Z][A-Z0-9]+-[0-9]+' | head -1)
-                  fi
-
-                  HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-                    --connect-timeout 10 --max-time 60 \
-                    --location 'https://ssd7q1hyc8.execute-api.eu-west-1.amazonaws.com/production/insecproxy' \
-                    --header 'Content-Type: application/json' \
-                    --data "{
-                      \"type\": \"blackduck\",
-                      \"comments_url\": \"${PR_COMMENTS_URL}\",
-                      \"task_key\": \"${TASK_KEY}\",
-                      \"pr_api_url\": \"${PR_API_URL}\",
-                      \"owner_repo_name\": \"${OWNER_REPO_NAME}\",
-                      \"repo_name\": \"${REPO_NAME}\",
-                      \"pr_number\": \"${PR_NUMBER}\"
-                    }")
-
-                  if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
-                    echo "::warning::BlackDuck scan request failed with HTTP $HTTP_STATUS"
-                  fi
-
-    pr-closed:
-        if: github.event.action == 'closed' && !github.event.pull_request.merged
-        runs-on: self-runner-node
-        steps:
-            - name: Notify PR closed
-              env:
-                  PR_HTML_URL: ${{ github.event.pull_request.html_url }}
-              run: |
-                  HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-                    --connect-timeout 10 --max-time 60 \
-                    --location 'https://0wu8075cd8.execute-api.eu-west-1.amazonaws.com/prod/close' \
-                    --header 'Content-Type: application/json' \
-                    --data "{\"pr_url\":\"${PR_HTML_URL}\"}")
-
-                  if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
-                    echo "::error::PR close notification failed with HTTP $HTTP_STATUS"
-                    exit 1
-                  fi
+  call-security-review:
+    uses: useinsider/aio-core-hub/.github/workflows/ai-security-review.yml@main
+    secrets: inherit
