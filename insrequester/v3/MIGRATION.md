@@ -1,0 +1,3 @@
+# Migration Guide: insrequester v2 -> v3
+
+v3 replaces the abandoned `github.com/slok/goresilience` (which transitively pulled the vulnerable `prometheus/client_golang@v0.9.2`, CVE-2022-21698) with the actively maintained `github.com/failsafe-go/failsafe-go`. The public API is unchanged: the same `Requester` interface, the same `NewRequester`, `WithRetry`, `WithCircuitbreaker`, `WithTimeout`, `WithHTTPClient`, `WithHeaders`, `Load`, `RequestEntity`, `Headers`, `RetryConfig`, and `CircuitBreakerConfig` types are all preserved. To migrate, update the import path from `github.com/useinsider/go-pkg/insrequester/v2` to `github.com/useinsider/go-pkg/insrequester/v3` and run `go mod tidy`.
