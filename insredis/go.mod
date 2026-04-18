@@ -1,6 +1,6 @@
 module github.com/useinsider/go-pkg/insredis
 
-go 1.26.0
+go 1.25.9
 
 require (
 	github.com/go-redis/redis v6.15.9+incompatible

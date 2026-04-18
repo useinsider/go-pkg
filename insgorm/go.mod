@@ -1,6 +1,6 @@
 module github.com/useinsider/go-pkg/insgorm
 
-go 1.26.0
+go 1.25.9
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0

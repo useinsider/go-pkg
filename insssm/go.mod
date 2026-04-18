@@ -1,6 +1,6 @@
 module github.com/useinsider/go-pkg/insssm
 
-go 1.26.0
+go 1.25.9
 
 require (
 	github.com/Jamil-Najafov/go-aws-ssm v0.9.0

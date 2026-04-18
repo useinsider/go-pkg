@@ -1,6 +1,6 @@
 module github.com/useinsider/go-pkg/insdash
 
-go 1.26.0
+go 1.25.9
 
 require github.com/stretchr/testify v1.8.1
 

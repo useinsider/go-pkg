@@ -1,6 +1,6 @@
 module github.com/useinsider/go-pkg/inssqs
 
-go 1.26.0
+go 1.25.9
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.23.1

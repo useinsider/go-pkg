@@ -1,6 +1,6 @@
 module github.com/useinsider/go-pkg/inssentry
 
-go 1.26.0
+go 1.25.9
 
 require github.com/getsentry/sentry-go v0.13.0
 

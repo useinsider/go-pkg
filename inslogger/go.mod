@@ -1,6 +1,6 @@
 module github.com/useinsider/go-pkg/inslogger
 
-go 1.26.0
+go 1.25.9
 
 require go.uber.org/zap v1.26.0
 

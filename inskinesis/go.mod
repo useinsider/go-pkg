@@ -1,6 +1,6 @@
 module github.com/useinsider/go-pkg/inskinesis
 
-go 1.26.0
+go 1.25.9
 
 require (
 	github.com/aws/aws-sdk-go v1.44.3
