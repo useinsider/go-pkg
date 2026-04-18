@@ -1,6 +1,6 @@
 module github.com/useinsider/go-pkg/inscacheable
 
-go 1.19
+go 1.26.0
 
 require (
 	github.com/jellydator/ttlcache/v3 v3.0.0
