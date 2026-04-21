@@ -1,10 +1,4 @@
 {
-  "enabledPlugins": {
-    "claude-code-setup@claude-plugins-official": true,
-    "context7@aio-plugin-marketplace": true,
-    "engineering-knowledge-base@aio-plugin-marketplace": true,
-    "safety@aio-plugin-marketplace": true
-  },
   "hooks": {
     "PreToolUse": [
       {
