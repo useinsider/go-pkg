@@ -23,7 +23,6 @@ import (
 
 var tracer = otel.Tracer("insrequester")
 
-// NewRequester ...
 func NewRequester() Requester {
 	return &Request{}
 }
