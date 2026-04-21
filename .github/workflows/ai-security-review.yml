@@ -1,0 +1,12 @@
+name: AI Security Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, closed]
+  issue_comment:
+    types: [created]
+
+jobs:
+  call-security-review:
+    uses: useinsider/aio-core-hub/.github/workflows/ai-security-review.yml@main
+    secrets: inherit
