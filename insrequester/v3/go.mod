@@ -1,10 +1,9 @@
 module github.com/useinsider/go-pkg/insrequester/v3
 
-go 1.25.9
+go 1.25.0
 
 require (
 	github.com/failsafe-go/failsafe-go v0.5.0
-	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/otel v1.43.0
 	go.opentelemetry.io/otel/trace v1.43.0

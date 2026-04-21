@@ -8,12 +8,12 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/failsafe-go/failsafe-go"
 	"github.com/failsafe-go/failsafe-go/circuitbreaker"
 	"github.com/failsafe-go/failsafe-go/retrypolicy"
-	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -29,14 +29,31 @@ func NewRequester() Requester {
 }
 
 type CircuitBreakerConfig struct {
-	MinimumRequestToOpen         int
+	// MinimumRequestToOpen is the number of consecutive failures that will trip the
+	// breaker. Used only when rate-based fields below are zero-valued.
+	MinimumRequestToOpen int
+
+	// FailureRateThreshold (percent, 1-100), FailureExecutionThreshold (minimum
+	// samples in the window), and FailureThresholdingPeriod together configure a
+	// Hystrix-style rate-based breaker. When FailureRateThreshold is non-zero,
+	// MinimumRequestToOpen is ignored.
+	FailureRateThreshold      uint
+	FailureExecutionThreshold uint
+	FailureThresholdingPeriod time.Duration
+
 	SuccessfulRequiredOnHalfOpen int
 	WaitDurationInOpenState      time.Duration
 }
 
 type RetryConfig struct {
+	// WaitBase is the base delay between retries. When WaitMax is zero the delay is
+	// fixed; otherwise delay grows exponentially up to WaitMax.
 	WaitBase time.Duration
-	Times    int
+	// WaitMax caps exponential backoff. Zero disables backoff (fixed WaitBase).
+	WaitMax time.Duration
+	// JitterFactor randomizes each delay by +/- (delay * factor). Valid range: 0.0-1.0.
+	JitterFactor float32
+	Times        int
 }
 
 // Requester represent the package structure, with creating exactly the same interface your own codebase you can
@@ -67,6 +84,7 @@ type Request struct {
 	timeout    time.Duration
 	httpClient *http.Client
 	executor   failsafe.Executor[*http.Response]
+	initOnce   sync.Once
 	policies   []failsafe.Policy[*http.Response]
 	headers    Headers
 }
@@ -104,21 +122,24 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 	defer span.End()
 
 	var (
-		outerErr    error
-		attempt     int
-		lastErrBody string
+		outerErr       error
+		attempt        int
+		lastErrBody    string
+		lastStatusCode int
 	)
 
-	if r.executor == nil {
-		r.executor = failsafe.NewExecutor[*http.Response](r.policies...)
-	}
+	r.initOnce.Do(func() {
+		if r.executor == nil {
+			r.executor = failsafe.NewExecutor[*http.Response](r.policies...)
+		}
+	})
 
 	res, runnerErr := r.executor.WithContext(ctx).GetWithExecution(func(exec failsafe.Execution[*http.Response]) (*http.Response, error) {
 		attempt++
 
 		req, err := http.NewRequestWithContext(exec.Context(), httpMethod, re.Endpoint, bytes.NewReader(re.Body))
+		outerErr = err
 		if err != nil {
-			outerErr = err
 			return nil, nil
 		}
 
@@ -137,10 +158,12 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 		}
 
 		response, doErr := client.Do(req)
+		outerErr = doErr
 		if doErr != nil {
-			outerErr = doErr
 			return nil, ErrRetryable
 		}
+
+		lastStatusCode = response.StatusCode
 
 		if response.StatusCode >= 100 && response.StatusCode < 200 ||
 			response.StatusCode == 429 ||
@@ -173,14 +196,17 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 		resendCount = attempt - 1
 	}
 	span.SetAttributes(attribute.Int("http.resend_count", resendCount))
+	if lastStatusCode > 0 {
+		span.SetAttributes(attribute.Int("http.response.status_code", lastStatusCode))
+	}
 
 	if errors.Is(runnerErr, circuitbreaker.ErrOpen) {
 		span.SetStatus(codes.Error, "circuit breaker open")
 		if outerErr != nil {
-			return nil, pkgerrors.Wrap(ErrCircuitBreakerOpen, outerErr.Error())
+			return nil, fmt.Errorf("%s: %w", outerErr.Error(), ErrCircuitBreakerOpen)
 		}
 		if lastErrBody != "" {
-			return nil, pkgerrors.Wrap(ErrCircuitBreakerOpen, lastErrBody)
+			return nil, fmt.Errorf("%s: %w", lastErrBody, ErrCircuitBreakerOpen)
 		}
 		return nil, ErrCircuitBreakerOpen
 	}
@@ -194,13 +220,9 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 	if runnerErr != nil {
 		span.SetStatus(codes.Error, "retries exhausted")
 		if lastErrBody != "" {
-			return nil, pkgerrors.Wrap(ErrRetriesExhausted, lastErrBody)
+			return nil, fmt.Errorf("%s: %w", lastErrBody, ErrRetriesExhausted)
 		}
 		return nil, ErrRetriesExhausted
-	}
-
-	if res != nil {
-		span.SetAttributes(attribute.Int("http.response.status_code", res.StatusCode))
 	}
 
 	return res, nil
@@ -231,13 +253,28 @@ func (r *Request) WithRetry(config RetryConfig) *Request {
 		config.Times = 3
 	}
 
-	policy := retrypolicy.Builder[*http.Response]().
+	builder := retrypolicy.Builder[*http.Response]().
 		WithMaxRetries(config.Times).
-		WithDelay(config.WaitBase).
 		HandleIf(func(_ *http.Response, err error) bool {
 			return err != nil
 		}).
-		Build()
+		AbortOnErrors(circuitbreaker.ErrOpen, context.Canceled, context.DeadlineExceeded)
+
+	if config.WaitMax > 0 {
+		builder = builder.WithBackoff(config.WaitBase, config.WaitMax)
+	} else {
+		builder = builder.WithDelay(config.WaitBase)
+	}
+
+	if config.JitterFactor > 0 {
+		jitter := config.JitterFactor
+		if jitter > 1 {
+			jitter = 1
+		}
+		builder = builder.WithJitterFactor(jitter)
+	}
+
+	policy := builder.Build()
 
 	r.policies = append(r.policies, policy)
 
@@ -245,10 +282,6 @@ func (r *Request) WithRetry(config RetryConfig) *Request {
 }
 
 func (r *Request) WithCircuitbreaker(config CircuitBreakerConfig) *Request {
-	if config.MinimumRequestToOpen == 0 {
-		config.MinimumRequestToOpen = 3
-	}
-
 	if config.SuccessfulRequiredOnHalfOpen == 0 {
 		config.SuccessfulRequiredOnHalfOpen = 1
 	}
@@ -257,16 +290,44 @@ func (r *Request) WithCircuitbreaker(config CircuitBreakerConfig) *Request {
 		config.WaitDurationInOpenState = 5 * time.Second
 	}
 
-	policy := circuitbreaker.Builder[*http.Response]().
-		WithFailureThreshold(uint(config.MinimumRequestToOpen)).
-		WithSuccessThreshold(uint(config.SuccessfulRequiredOnHalfOpen)).
+	successThreshold := config.SuccessfulRequiredOnHalfOpen
+	if successThreshold < 0 {
+		successThreshold = 0
+	}
+	builder := circuitbreaker.Builder[*http.Response]().
+		WithSuccessThreshold(uint(successThreshold)).
 		WithDelay(config.WaitDurationInOpenState).
 		HandleIf(func(_ *http.Response, err error) bool {
 			return err != nil
-		}).
-		Build()
+		})
 
-	r.policies = append(r.policies, policy)
+	if config.FailureRateThreshold > 0 {
+		rate := config.FailureRateThreshold
+		if rate > 100 {
+			rate = 100
+		}
+		if config.FailureExecutionThreshold == 0 {
+			config.FailureExecutionThreshold = 20
+		}
+		if config.FailureThresholdingPeriod == 0 {
+			config.FailureThresholdingPeriod = 10 * time.Second
+		}
+		builder = builder.WithFailureRateThreshold(
+			rate,
+			config.FailureExecutionThreshold,
+			config.FailureThresholdingPeriod,
+		)
+	} else {
+		if config.MinimumRequestToOpen == 0 {
+			config.MinimumRequestToOpen = 3
+		}
+		if config.MinimumRequestToOpen < 0 {
+			config.MinimumRequestToOpen = 0
+		}
+		builder = builder.WithFailureThreshold(uint(config.MinimumRequestToOpen))
+	}
+
+	r.policies = append(r.policies, builder.Build())
 
 	return r
 }
