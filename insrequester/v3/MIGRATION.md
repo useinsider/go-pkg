@@ -9,6 +9,8 @@ v3 replaces the abandoned `github.com/slok/goresilience` (which transitively pul
 - **Circuit breaker `MinimumRequestToOpen` is now strictly consecutive-failures-in-closed-state.** `goresilience`'s implementation had a latent bug that treated this value as a percent threshold over a rolling window. `failsafe-go`'s `WithFailureThreshold` trips only after `N` consecutive failures and a single intervening success resets the counter. For sliding-window behavior use the new `FailureRateThreshold` / `FailureExecutionThreshold` / `FailureThresholdingPeriod` fields.
 - **`ErrTimeout` sentinel is unreachable in v3.** v2 mapped `goresilience`'s internal timeout error to `ErrTimeout`. v3 has no timeout policy; transport-level timeouts surface as the underlying `*url.Error` wrapping `context.DeadlineExceeded`. The `ErrTimeout` symbol is retained (deprecated) for source compatibility.
 - **Minimum Go version bumped to 1.25** (v2 required 1.24.0).
+- **Requester-level headers no longer duplicate across retry attempts.** v2's retry loop re-prepended `r.headers` on every attempt, so a request that retried three times would see its requester-level headers copied three times. v3 builds a fresh combined header slice per attempt.
+- **`context.Canceled` and `context.DeadlineExceeded` propagate unchanged to the caller.** When the parent context is cancelled or its deadline expires, callers now receive the original `context.*` error (so `errors.Is(err, context.Canceled)` works) instead of a wrapped retryable sentinel.
 
 ## New optional config (additive, zero-valued defaults preserve v2 semantics)
 

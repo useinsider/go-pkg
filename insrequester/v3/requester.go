@@ -104,7 +104,7 @@ func (r *Request) Put(ctx context.Context, re RequestEntity) (*http.Response, er
 	return r.sendRequest(ctx, http.MethodPut, re)
 }
 
-// Delete sends HTTP put request to the given endpoint and returns *http.Response and an error.
+// Delete sends HTTP delete request to the given endpoint and returns *http.Response and an error.
 func (r *Request) Delete(ctx context.Context, re RequestEntity) (*http.Response, error) {
 	return r.sendRequest(ctx, http.MethodDelete, re)
 }
@@ -145,8 +145,10 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 
 		req.Close = true
 		otel.GetTextMapPropagator().Inject(exec.Context(), propagation.HeaderCarrier(req.Header))
-		re.Headers = append(r.headers, re.Headers...) // RequestEntity headers will override Requester level headers.
-		re.applyHeadersToRequest(req)
+		combinedHeaders := make(Headers, 0, len(r.headers)+len(re.Headers))
+		combinedHeaders = append(combinedHeaders, r.headers...)
+		combinedHeaders = append(combinedHeaders, re.Headers...) // RequestEntity headers will override Requester level headers.
+		RequestEntity{Headers: combinedHeaders}.applyHeadersToRequest(req)
 
 		client := r.httpClient
 		if client == nil {
@@ -160,6 +162,12 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 		response, doErr := client.Do(req)
 		outerErr = doErr
 		if doErr != nil {
+			if response != nil && response.Body != nil {
+				response.Body.Close()
+			}
+			if ctxErr := exec.Context().Err(); ctxErr != nil {
+				return nil, ctxErr
+			}
 			return nil, ErrRetryable
 		}
 

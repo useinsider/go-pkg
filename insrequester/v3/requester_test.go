@@ -665,6 +665,70 @@ func TestRequest_Get(t *testing.T) {
 		wg.Wait()
 	})
 
+	t.Run("it_should_not_duplicate_requester_headers_across_retries", func(t *testing.T) {
+		var mu sync.Mutex
+		var seen []string
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			seen = append(seen, r.Header.Values("X-Client")...)
+			mu.Unlock()
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer ts.Close()
+
+		r := NewRequester().
+			WithHeaders(Headers{{"X-Client": "alpha"}}).
+			WithRetry(RetryConfig{WaitBase: 5 * time.Millisecond, Times: 3}).
+			Load()
+
+		_, _ = r.Get(t.Context(), RequestEntity{Endpoint: ts.URL})
+
+		mu.Lock()
+		defer mu.Unlock()
+		require.Len(t, seen, 4, "4 attempts = 4 header values captured")
+		for i, v := range seen {
+			assert.Equal(t, "alpha", v,
+				"attempt %d: requester header must not accumulate duplicates (got %q)", i+1, v)
+		}
+	})
+
+	t.Run("it_should_not_mutate_caller_RequestEntity_headers", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer ts.Close()
+
+		r := NewRequester().WithHeaders(Headers{{"X-A": "1"}, {"X-B": "2"}})
+
+		callerHeaders := Headers{{"X-Entity": "entity-value"}}
+		original := make(Headers, len(callerHeaders))
+		copy(original, callerHeaders)
+
+		_, err := r.Get(t.Context(), RequestEntity{Endpoint: ts.URL, Headers: callerHeaders})
+		assert.NoError(t, err)
+		assert.Equal(t, original, callerHeaders, "sendRequest must not mutate caller's RequestEntity.Headers")
+	})
+
+	t.Run("it_should_propagate_parent_ctx_cancellation_error", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			<-r.Context().Done()
+		}))
+		defer ts.Close()
+
+		r := NewRequester().
+			WithRetry(RetryConfig{WaitBase: 5 * time.Millisecond, Times: 3}).
+			Load()
+
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+
+		_, err := r.Get(ctx, RequestEntity{Endpoint: ts.URL})
+		require.Error(t, err)
+		assert.True(t,
+			errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded),
+			"expected ctx error propagated as-is; got %v", err)
+	})
+
 	t.Run("it_should_transition_circuit_breaker_back_to_closed_after_delay", func(t *testing.T) {
 		var failing atomic.Bool
 		failing.Store(true)
