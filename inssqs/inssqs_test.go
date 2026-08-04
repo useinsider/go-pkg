@@ -112,7 +112,7 @@ func TestQueue_DeleteMessageBatch(t *testing.T) {
 			{Id: aws.String("test-id")},
 		})
 
-		assert.Nil(t, err, "err should be nil")
+		assert.Error(t, err, "err should not be nil")
 		assert.NotNil(t, failed, "failed should not be nil")
 		assert.Equal(t, failed[0].Id, aws.String("test-id"), "failed id should be equal to test-id")
 	})
@@ -148,6 +148,7 @@ func TestQueue_getQueueUrl(t *testing.T) {
 
 		client.EXPECT().
 			GetQueueUrl(gomock.Any(), gomock.Any(), gomock.Any()).
+			Times(3).
 			Return(nil, assert.AnError)
 
 		queueUrl, err := q.getQueueUrl()
@@ -186,6 +187,7 @@ func newQueue(t *testing.T) (queue, *sqs.MockAPI) {
 		client:     client,
 		name:       "test-queue",
 		retryCount: 3,
+		workers:    1,
 		logger:     inslogger.NewLogger(inslogger.Debug),
 	}, client
 }

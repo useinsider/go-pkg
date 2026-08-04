@@ -29,6 +29,7 @@ config := inssqs.Config{
     MaxBatchSizeBytes: 1024,
     MaxWorkers:        5,
     LogLevel:          "info",
+    RequestTimeout:    5 * time.Second,
 }
 
 sqs := inssqs.NewSQS(config)
@@ -69,6 +70,7 @@ if err != nil {
 - MaxBatchSizeBytes: Maximum size of a message batch in bytes.
 - MaxWorkers: Maximum number of workers for concurrent operations.
 - LogLevel: Log level for SQS operations.
+- RequestTimeout: Timeout for a single SQS API request attempt (default 5s). Bounds each HTTP request, so a stalled connection fails fast and is retried instead of hanging indefinitely.
 For more details on each function and its parameters, refer to the code documentation.
 
 
