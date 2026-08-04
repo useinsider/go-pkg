@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
+	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	awssqs "github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
@@ -13,6 +14,7 @@ import (
 	"github.com/useinsider/go-pkg/inslogger"
 	"github.com/useinsider/go-pkg/inssqs/sqs"
 	"sync"
+	"time"
 )
 
 type Interface interface {
@@ -45,6 +47,8 @@ type Config struct {
 	MaxWorkers        int    // Maximum number of workers for concurrent operations.
 	LogLevel          string // Log level for SQS operations.
 
+	RequestTimeout time.Duration // Timeout for a single SQS API request attempt. The AWS SDK default HTTP client has none, so a stalled connection otherwise hangs until the caller is killed.
+
 	EndpointUrl string // Endpoint URL for AWS operations.
 }
 
@@ -62,7 +66,8 @@ func NewSQS(config Config) Interface {
 	cfg, err := awsconfig.LoadDefaultConfig(context.Background(),
 		awsconfig.WithRegion(config.Region),
 		awsconfig.WithRetryMaxAttempts(config.RetryCount),
-		awsconfig.WithRetryMode(aws.RetryModeAdaptive))
+		awsconfig.WithRetryMode(aws.RetryModeAdaptive),
+		awsconfig.WithHTTPClient(awshttp.NewBuildableClient().WithTimeout(config.RequestTimeout)))
 	if err != nil {
 		panic(errors.Wrap(err, "error while loading aws sqs config"))
 	}
@@ -114,6 +119,10 @@ func (c *Config) setDefaults() {
 
 	if c.RetryCount == 0 {
 		c.RetryCount = 3
+	}
+
+	if c.RequestTimeout <= 0 {
+		c.RequestTimeout = 5 * time.Second
 	}
 }
 
@@ -201,9 +210,6 @@ func (q *queue) sendBatchesConcurrently(batches [][]SQSMessageEntry) ([]SQSMessa
 // - err: An error indicating any failure during the concurrent deletion process, nil if all operations succeeded.
 func (q *queue) deleteBatchesConcurrently(batches [][]SQSDeleteMessageEntry) ([]SQSDeleteMessageEntry, error) {
 	failedEntries, err := doConcurrently(batches, q.workers, q.retryCount, q.deleteMessageBatch)
-	if err != nil {
-		return nil, err
-	}
 
 	return failedEntries, err
 }
