@@ -1,6 +1,7 @@
 package inssqs
 
 import (
+	"errors"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awssqs "github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
@@ -10,6 +11,7 @@ import (
 	"github.com/useinsider/go-pkg/inssqs/sqs"
 	"go.uber.org/mock/gomock"
 	"testing"
+	"time"
 )
 
 func TestQueue_SendMessageBatch(t *testing.T) {
@@ -112,7 +114,7 @@ func TestQueue_DeleteMessageBatch(t *testing.T) {
 			{Id: aws.String("test-id")},
 		})
 
-		assert.Nil(t, err, "err should be nil")
+		assert.NotNil(t, err, "err should not be nil")
 		assert.NotNil(t, failed, "failed should not be nil")
 		assert.Equal(t, failed[0].Id, aws.String("test-id"), "failed id should be equal to test-id")
 	})
@@ -148,6 +150,7 @@ func TestQueue_getQueueUrl(t *testing.T) {
 
 		client.EXPECT().
 			GetQueueUrl(gomock.Any(), gomock.Any(), gomock.Any()).
+			Times(3).
 			Return(nil, assert.AnError)
 
 		queueUrl, err := q.getQueueUrl()
@@ -188,4 +191,59 @@ func newQueue(t *testing.T) (queue, *sqs.MockAPI) {
 		retryCount: 3,
 		logger:     inslogger.NewLogger(inslogger.Debug),
 	}, client
+}
+
+func Test_doConcurrently(t *testing.T) {
+	t.Run("should_not_race_when_multiple_workers_fail_concurrently", func(t *testing.T) {
+		batches := make([][]string, 16)
+		for i := range batches {
+			batches[i] = []string{"entry"}
+		}
+
+		failed, err := doConcurrently(batches, 8, 0, func(b []string, _ int) ([]string, error) {
+			time.Sleep(time.Millisecond)
+			return b, errors.New("send failed")
+		})
+
+		assert.NotNil(t, err, "err should not be nil")
+		assert.Len(t, failed, 16, "all entries should be reported as failed")
+	})
+
+	t.Run("should_recover_from_panic_and_mark_batch_failed", func(t *testing.T) {
+		batches := [][]string{{"panic-entry"}, {"ok-entry-1"}, {"ok-entry-2"}}
+
+		failed, err := doConcurrently(batches, 3, 0, func(b []string, _ int) ([]string, error) {
+			if b[0] == "panic-entry" {
+				panic("boom")
+			}
+
+			return nil, nil
+		})
+
+		assert.NotNil(t, err, "err should not be nil")
+		assert.Contains(t, err.Error(), "panic", "err should mention the panic")
+		assert.Equal(t, []string{"panic-entry"}, failed, "panicked batch should be reported as failed")
+	})
+
+	t.Run("should_not_deadlock_when_workers_is_zero", func(t *testing.T) {
+		batches := [][]string{{"a"}, {"b"}}
+
+		failed, err := doConcurrently(batches, 0, 0, func(_ []string, _ int) ([]string, error) {
+			return nil, nil
+		})
+
+		assert.Nil(t, err, "err should be nil")
+		assert.Empty(t, failed, "no entries should fail")
+	})
+
+	t.Run("should_return_no_error_when_all_batches_succeed", func(t *testing.T) {
+		batches := [][]string{{"a"}, {"b"}, {"c"}}
+
+		failed, err := doConcurrently(batches, 2, 0, func(_ []string, _ int) ([]string, error) {
+			return nil, nil
+		})
+
+		assert.Nil(t, err, "err should be nil")
+		assert.Empty(t, failed, "no entries should fail")
+	})
 }

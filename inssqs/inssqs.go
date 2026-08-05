@@ -201,9 +201,6 @@ func (q *queue) sendBatchesConcurrently(batches [][]SQSMessageEntry) ([]SQSMessa
 // - err: An error indicating any failure during the concurrent deletion process, nil if all operations succeeded.
 func (q *queue) deleteBatchesConcurrently(batches [][]SQSDeleteMessageEntry) ([]SQSDeleteMessageEntry, error) {
 	failedEntries, err := doConcurrently(batches, q.workers, q.retryCount, q.deleteMessageBatch)
-	if err != nil {
-		return nil, err
-	}
 
 	return failedEntries, err
 }
@@ -386,10 +383,21 @@ func doConcurrently[T any](batches [][]T, workers int, retryCount int, f func([]
 		return nil, nil
 	}
 
+	if workers < 1 {
+		workers = 1
+	}
+
 	concurrentLimiter := make(chan struct{}, workers)
 	wg := sync.WaitGroup{}
+	var mu sync.Mutex
 	var outerErr error
 	failedEntriesChan := make(chan []T)
+
+	setErr := func(err error) {
+		mu.Lock()
+		defer mu.Unlock()
+		outerErr = err
+	}
 
 	for _, batch := range batches {
 		wg.Add(1)
@@ -397,9 +405,15 @@ func doConcurrently[T any](batches [][]T, workers int, retryCount int, f func([]
 			defer wg.Done()
 			concurrentLimiter <- struct{}{}
 			defer func() { <-concurrentLimiter }()
+			defer func() {
+				if r := recover(); r != nil {
+					setErr(errors.Errorf("panic during concurrent batch operation: %v", r))
+					failedEntriesChan <- b
+				}
+			}()
 			fe, err := f(b, retryCount+1)
 			if err != nil {
-				outerErr = err
+				setErr(err)
 			}
 			failedEntriesChan <- fe
 		}(batch)
