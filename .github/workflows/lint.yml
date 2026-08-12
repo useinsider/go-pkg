@@ -12,8 +12,7 @@ permissions:
 jobs:
   discover-modules:
     name: Discover modules
-    runs-on:
-      labels: self-hosted
+    runs-on: self-hosted
     outputs:
       modules: ${{ steps.discover.outputs.modules }}
     steps:
@@ -26,8 +25,7 @@ jobs:
   golangci:
     name: golangci-lint
     needs: discover-modules
-    runs-on:
-      labels: self-hosted
+    runs-on: self-hosted
     strategy:
       fail-fast: false
       matrix:

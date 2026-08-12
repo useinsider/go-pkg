@@ -5,8 +5,7 @@ on:
       - develop
 jobs:
   mysql-check:
-    runs-on:
-      labels: self-hosted
+    runs-on: self-hosted
     steps:
       - name: Create GitHub App token
         id: github-app-token
