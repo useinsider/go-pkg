@@ -49,9 +49,17 @@ fi
   done
 } > "$WORK/merged.out"
 
-# 4. Filter OUT exactly the 7 generated mock files, by filename.
-grep -v -E 'github\.com/useinsider/go-pkg/(insredis/redis_mock\.go|insrequester/v2/requester_mock\.go|insrequester/v3/requester_mock\.go|inskinesis/kinesis_mock\.go|inskinesis/inskinesis_mock\.go|inssqs/sqs/sqs_mock\.go|inssqs/inssqs_mock\.go):' \
-  "$WORK/merged.out" > "$OUT"
+# 4. Filter OUT exactly the 7 generated mock files, by filename, then normalize
+#    the insrequester v2 module-path segment. The insrequester module declares
+#    path .../insrequester/v2 but its source lives on disk at insrequester/
+#    (there is no insrequester/v2/ dir — unlike insrequester/v3/), so the raw
+#    profile keys those lines under insrequester/v2/*. Rewrite v2 -> (no vN) so
+#    coverus resolves them to the real on-disk files after stripping the module
+#    prefix. `|| true` keeps set -e from aborting when the inverse-match is empty
+#    (degenerate all-mock/empty input); the awk guard below reports that case.
+{ grep -v -E 'github\.com/useinsider/go-pkg/(insredis/redis_mock\.go|insrequester/v2/requester_mock\.go|insrequester/v3/requester_mock\.go|inskinesis/kinesis_mock\.go|inskinesis/inskinesis_mock\.go|inssqs/sqs/sqs_mock\.go|inssqs/inssqs_mock\.go):' \
+  "$WORK/merged.out" || true; } \
+  | sed -E 's#(github\.com/useinsider/go-pkg/insrequester)/v2/#\1/#' > "$OUT"
 
 # 5. Statement-weighted coverage percentage.
 awk 'NR > 1 { total += $2; if ($3 > 0) covered += $2 } END {
