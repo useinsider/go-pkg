@@ -11,8 +11,6 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 )
 
-// captureDriver records the DSN it is opened with and always fails, so tests
-// can assert the DSN format without a real database.
 type captureDriver struct {
 	mu      sync.Mutex
 	lastDSN string
@@ -37,7 +35,6 @@ var registerOnce sync.Once
 
 func registerTestDriver(t *testing.T) {
 	t.Helper()
-	// sql.Register panics on duplicate names; register once for the package.
 	registerOnce.Do(func() {
 		sql.Register("inssql-test", testDriver)
 	})
@@ -63,7 +60,6 @@ func TestNew(t *testing.T) {
 		}
 		defer db.Close()
 
-		// sql.Open is lazy; force a connection attempt so the driver sees the DSN.
 		_ = db.Ping()
 
 		want := "user:pass@tcp(dbhost:3306)/dbname?charset=utf8mb4&collation=utf8mb4_unicode_ci&parseTime=true"
@@ -76,8 +72,6 @@ func TestNew(t *testing.T) {
 func TestInit(t *testing.T) {
 	registerTestDriver(t)
 
-	// The package keeps a singleton *sql.DB; these subtests intentionally run
-	// in order against that shared state.
 	sqlClient = nil
 
 	t.Run("it_should_propagate_open_error_and_stay_uninitialized", func(t *testing.T) {

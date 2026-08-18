@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-// Init keeps a package-level singleton; subtests run in order against it.
-// No test talks to a real Redis — go-redis connects lazily.
 
 func TestInit(t *testing.T) {
 	redisClient = nil

@@ -53,8 +53,6 @@ func TestCachableLoader(t *testing.T) {
 		assert.Equal(t, "key A is 1", actual1)
 	})
 
-	// Expire the cache. Sleep past the TTL with a margin — sleeping exactly
-	// the TTL raced the expiry clock and made the reload subtests flaky.
 	time.Sleep(ttl + 200*time.Millisecond)
 
 	t.Run("it_should_get_the_third_item", func(t *testing.T) {

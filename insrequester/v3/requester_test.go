@@ -77,10 +77,6 @@ func TestRequest_Get(t *testing.T) {
 	})
 
 	t.Run("it_should_retry_on_timeout", func(t *testing.T) {
-		// PA-39500 deflake: with a 1ms client timeout the server handler is
-		// not a reliable attempt counter — an attempt can time out before the
-		// handler even starts. Count attempts at the transport level instead,
-		// and assert a lower bound (>=2) rather than an exact count.
 		var retryTimes int32
 		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(100 * time.Millisecond)

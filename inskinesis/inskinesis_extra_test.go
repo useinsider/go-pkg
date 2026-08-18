@@ -20,8 +20,6 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-// newTestStream builds a stream wired like NewKinesis does, but with an
-// injected KinesisInterface so no AWS call ever happens.
 func newTestStream(kc KinesisInterface, logBufferSize, maxGroup int) *stream {
 	return &stream{
 		region:        "eu-west-1",
@@ -45,7 +43,7 @@ func newTestStream(kc KinesisInterface, logBufferSize, maxGroup int) *stream {
 		retryCount:    1,
 		retryWaitTime: time.Millisecond,
 
-		verbose: true, // exercises printf
+		verbose: true,
 	}
 }
 
@@ -84,7 +82,6 @@ func TestNewKinesis(t *testing.T) {
 		assert.NotNil(t, s.partitioner)
 		assert.Equal(t, 100*time.Millisecond, s.retryWaitTime)
 
-		// Shut the started goroutines down without any AWS traffic.
 		si.FlushAndStopStreaming()
 	})
 }
@@ -144,8 +141,6 @@ func TestStream_PutAndFlush(t *testing.T) {
 		s := newTestStream(mockKinesis, 2, 1)
 		s.start()
 
-		// 4 records with logBufferSize=2: the in-stream flush triggers at the
-		// 4th record (buffer len 3 > 2); the last record is flushed at stop.
 		mockKinesis.EXPECT().
 			PutRecords(gomock.Any()).
 			MinTimes(1).
@@ -165,7 +160,6 @@ func TestStream_PutAndFlush(t *testing.T) {
 		s := newTestStream(mockKinesis, 100, 1)
 		s.start()
 
-		// No records at all: PutRecords must never be called.
 		s.FlushAndStopStreaming()
 
 		assert.Equal(t, 0, s.totalCount)
@@ -177,8 +171,6 @@ func TestStream_PutAndFlush(t *testing.T) {
 		s := newTestStream(mockKinesis, 1, 1)
 		s.start()
 
-		// Two channel records overflow logBufferSize=1 and fail json.Marshal
-		// inside createBatches on the in-stream flush path.
 		s.Put(make(chan int))
 		s.Put(make(chan int))
 
@@ -248,7 +240,6 @@ func Test_putRecords_retryExceeded(t *testing.T) {
 		mockKinesis := NewMockKinesisInterface(ctrl)
 		s := newTestStream(mockKinesis, 100, 1)
 
-		// The client must not be called once retries are exhausted.
 		failed, err := s.putRecords([]*kinesis.PutRecordsRequestEntry{
 			{Data: []byte("r\n"), PartitionKey: aws.String(testPartition)},
 		}, -1)
@@ -260,14 +251,10 @@ func Test_putRecords_retryExceeded(t *testing.T) {
 
 func Test_transformRecords_partialFailure(t *testing.T) {
 	t.Run("it_should_silently_drop_failed_record_when_later_record_succeeds", func(t *testing.T) {
-		// PA-39500: pins current (buggy) behavior — see bug registry.
-		// transformRecords reuses one err variable across the loop, so a
-		// marshal failure is erased by any later successful record: the bad
-		// record is dropped and the caller sees no error at all.
 		s := newTestStream(nil, 100, 1)
 
 		records := []interface{}{
-			make(chan int), // fails json.Marshal
+			make(chan int),
 			map[string]string{"k": "v"},
 		}
 
@@ -314,7 +301,6 @@ func Test_createBatches_invalidInput(t *testing.T) {
 	})
 }
 
-// timeoutNetError implements net.Error with Timeout() == true.
 type timeoutNetError struct{}
 
 func (timeoutNetError) Error() string   { return "i/o timeout" }

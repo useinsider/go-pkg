@@ -61,9 +61,6 @@ func TestRequest_sendRequestEdgeCases(t *testing.T) {
 	})
 
 	t.Run("it_should_close_partial_response_on_redirect_policy_error", func(t *testing.T) {
-		// CheckRedirect errors make http.Client.Do return BOTH a non-nil
-		// response and an error — the only path that exercises the
-		// response-close guard inside the Do error branch.
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/elsewhere", http.StatusFound)
 		}))
@@ -101,9 +98,6 @@ func TestRequest_sendRequestEdgeCases(t *testing.T) {
 	})
 
 	t.Run("it_should_report_transport_error_when_circuit_opens_mid_retry", func(t *testing.T) {
-		// Unreachable endpoint: the first attempt fails at the transport
-		// level, the breaker opens, and the retry aborts with the transport
-		// error wrapped around ErrCircuitBreakerOpen.
 		r := NewRequester().
 			WithRetry(RetryConfig{WaitBase: 5 * time.Millisecond, Times: 3}).
 			WithCircuitbreaker(CircuitBreakerConfig{
@@ -152,8 +146,6 @@ func TestRequest_ConfigDefaultsAndClamps(t *testing.T) {
 	t.Run("it_should_default_rate_based_breaker_thresholding_fields", func(t *testing.T) {
 		r := NewRequester().WithCircuitbreaker(CircuitBreakerConfig{
 			FailureRateThreshold: 50,
-			// FailureExecutionThreshold and FailureThresholdingPeriod zero:
-			// both must be defaulted rather than passed through as zero.
 		})
 		require.NotNil(t, r)
 		assert.Len(t, r.policies, 1)

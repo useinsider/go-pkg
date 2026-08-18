@@ -33,7 +33,6 @@ func echoUseCase(_ context.Context, cmd *echoCommand) (echoResult, error) {
 	return echoResult{Greeting: "hello " + cmd.Name}, nil
 }
 
-// statusErr implements StatusCoder, Headerer and json.Marshaler.
 type statusErr struct {
 	code int
 	msg  string
@@ -51,13 +50,11 @@ func (e statusErr) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]string{"error": e.msg})
 }
 
-// badMarshalErr implements json.Marshaler but always fails to marshal.
 type badMarshalErr struct{}
 
 func (badMarshalErr) Error() string                { return "cannot marshal me" }
 func (badMarshalErr) MarshalJSON() ([]byte, error) { return nil, errors.New("marshal broken") }
 
-// headeredResult implements Headerer and StatusCoder on the success path.
 type headeredResult struct {
 	Value string `json:"value"`
 }
@@ -68,7 +65,6 @@ func (headeredResult) Headers() http.Header {
 
 func (headeredResult) StatusCode() int { return http.StatusCreated }
 
-// noContentResult forces a 204 status.
 type noContentResult struct{}
 
 func (noContentResult) StatusCode() int { return http.StatusNoContent }

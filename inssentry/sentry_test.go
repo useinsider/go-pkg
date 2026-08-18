@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-// All tests run with an empty DSN, which the sentry SDK treats as a valid,
-// disabled client — no events ever leave the process.
 
 func initFor(t *testing.T, production bool) {
 	t.Helper()
@@ -93,8 +91,6 @@ func TestFatal(t *testing.T) {
 	})
 
 	t.Run("it_should_capture_then_panic_when_production", func(t *testing.T) {
-		// PA-39500: pins current behavior — Fatal panics instead of exiting,
-		// in production mode after capturing the exception.
 		initFor(t, true)
 
 		sentinel := errors.New("fatal in prod")

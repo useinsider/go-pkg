@@ -8,16 +8,12 @@ import (
 
 func TestNewGorm(t *testing.T) {
 	t.Run("it_should_return_error_when_version_query_fails", func(t *testing.T) {
-		// A sqlmock with no expectations rejects the driver's SELECT VERSION()
-		// probe, which surfaces as a gorm.Open error.
 		sqlDB, _, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		if err != nil {
 			t.Fatalf("sqlmock.New() error = %v", err)
 		}
 		defer sqlDB.Close()
 
-		// Note: gorm.Open returns a non-nil *gorm.DB alongside the error, and
-		// NewGorm passes both through unchanged — only the error is asserted.
 		_, err = NewGorm(sqlDB)
 		if err == nil {
 			t.Fatal("NewGorm() error = nil, want version query failure")
@@ -43,8 +39,6 @@ func TestNewGorm(t *testing.T) {
 }
 
 func TestWrapWithGorm(t *testing.T) {
-	// The package keeps a singleton *gorm.DB; run the subtests in order
-	// against a reset singleton.
 	gormClient = nil
 
 	t.Run("it_should_initialize_the_singleton", func(t *testing.T) {
@@ -70,7 +64,6 @@ func TestWrapWithGorm(t *testing.T) {
 	t.Run("it_should_return_cached_client_on_second_call", func(t *testing.T) {
 		first := GetGormClient()
 
-		// No sqlmock expectations here: a cached return must not touch the DB.
 		sqlDB, _, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		if err != nil {
 			t.Fatalf("sqlmock.New() error = %v", err)

@@ -19,8 +19,6 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-// newFakeSQSServer serves the awsjson1.0 SQS wire protocol for the three
-// operations this package uses.
 func newFakeSQSServer(t *testing.T, getQueueUrlStatus int) (*httptest.Server, *int32) {
 	t.Helper()
 	var calls int32
@@ -106,7 +104,6 @@ func TestNewSQS(t *testing.T) {
 
 	t.Run("it_should_panic_when_aws_config_loading_fails", func(t *testing.T) {
 		setFakeAWSEnv(t)
-		// An invalid boolean makes config.LoadDefaultConfig return an error.
 		t.Setenv("AWS_ENABLE_ENDPOINT_DISCOVERY", "definitely-not-a-bool")
 
 		defer func() {
@@ -149,8 +146,6 @@ func TestNewSQS(t *testing.T) {
 
 	t.Run("it_should_panic_when_queue_url_cannot_be_resolved", func(t *testing.T) {
 		setFakeAWSEnv(t)
-		// 400 QueueDoesNotExist is terminal for the SDK, so only the package's
-		// own retry loop spins (fast) before the constructor panics.
 		ts, _ := newFakeSQSServer(t, http.StatusBadRequest)
 
 		defer func() {
@@ -178,7 +173,6 @@ func TestQueue_sendMessageBatch_edgeCases(t *testing.T) {
 	})
 
 	t.Run("it_should_send_nothing_for_empty_batch_list", func(t *testing.T) {
-		// No EXPECT on the mock: an empty entry slice must not reach SQS.
 		q, _ := newQueue(t)
 
 		failed, err := q.SendMessageBatch(nil)
@@ -274,9 +268,6 @@ func TestFakeQueue_DeleteMessageBatch(t *testing.T) {
 	})
 
 	t.Run("it_should_keep_entry_when_id_value_matches_but_pointer_differs", func(t *testing.T) {
-		// PA-39500: pins current (buggy) behavior — see bug registry.
-		// DeleteMessageBatch compares *string pointers, not values, so an
-		// equal Id held in a different pointer is NOT removed.
 		q := &FakeQueue{Data: []SQSMessageEntry{{Id: aws.String("same")}}}
 
 		_, err := q.DeleteMessageBatch([]SQSDeleteMessageEntry{{Id: aws.String("same")}})
@@ -286,9 +277,6 @@ func TestFakeQueue_DeleteMessageBatch(t *testing.T) {
 	})
 
 	t.Run("it_should_duplicate_survivors_when_multiple_delete_entries_given", func(t *testing.T) {
-		// PA-39500: pins current (buggy) behavior — see bug registry.
-		// The nested loop appends a surviving entry once per non-matching
-		// delete entry, so two delete entries duplicate every survivor.
 		survivor := aws.String("survivor")
 		q := &FakeQueue{Data: []SQSMessageEntry{{Id: survivor}}}
 

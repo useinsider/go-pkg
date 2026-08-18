@@ -74,7 +74,6 @@ func TestNewNopLogger(t *testing.T) {
 		if l == nil {
 			t.Fatal("NewNopLogger() = nil")
 		}
-		// Must be safe to call every logging method.
 		l.Log("x")
 		l.Logf("%s", "x")
 		l.Warn("x")
@@ -217,9 +216,6 @@ func TestAppLogger_Fatal(t *testing.T) {
 
 func TestAppLogger_SetLevel(t *testing.T) {
 	t.Run("it_should_not_change_the_active_level", func(t *testing.T) {
-		// PA-39500: pins current (buggy) behavior — see bug registry.
-		// SetLevel discards the logger returned by WithOptions, so the
-		// receiver keeps logging at its original level.
 		al := NewLogger(Info).(*AppLogger)
 
 		if al.Logger.Core().Enabled(zapcore.DebugLevel) {

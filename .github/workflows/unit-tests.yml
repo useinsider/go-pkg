@@ -1,9 +1,3 @@
-# PA-39500: unit tests + merged statement coverage for the multi-module repo.
-# scripts/coverage.sh discovers every go.mod, tests each module, merges the
-# per-module profiles under a single 'mode: set' header, and filters out the
-# 7 generated mock files. Profile paths are pre-normalized by the script
-# (module-path-prefixed file names come straight from `go test -coverprofile`),
-# so coverage.out is ready for coverus as-is.
 name: Unit Tests
 
 on: push

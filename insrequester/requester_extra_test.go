@@ -110,9 +110,6 @@ func TestRequest_sendRequestEdgeCases(t *testing.T) {
 	})
 
 	t.Run("it_should_report_transport_error_when_circuit_opens_mid_retry", func(t *testing.T) {
-		// Unreachable endpoint: every attempt fails at the transport level, so
-		// when the breaker opens during the retry loop the last transport
-		// error is wrapped around ErrCircuitBreakerOpen.
 		r := NewRequester().
 			WithRetry(RetryConfig{WaitBase: 5 * time.Millisecond, Times: 5}).
 			WithCircuitbreaker(CircuitBreakerConfig{

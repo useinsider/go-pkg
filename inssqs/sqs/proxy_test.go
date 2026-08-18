@@ -16,8 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// newProxyUnderTest wires the proxy to a real *sqs.Client that talks to a
-// local stub speaking the awsjson1.0 SQS protocol.
 func newProxyUnderTest(t *testing.T) API {
 	t.Helper()
 

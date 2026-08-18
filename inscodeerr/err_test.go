@@ -131,9 +131,6 @@ func TestGetStatusCode(t *testing.T) {
 	})
 
 	t.Run("it_should_fall_back_to_500_for_pointer_to_CodeErr", func(t *testing.T) {
-		// PA-39500: pins current behavior — GetStatusCode uses a plain type
-		// assertion on the CodeErr value type, so *CodeErr (and wrapped
-		// CodeErr via fmt.Errorf %w) fall back to 500 instead of the code.
 		err := &inscodeerr.CodeErr{Code: http.StatusConflict}
 		if got := inscodeerr.GetStatusCode(err); got != http.StatusInternalServerError {
 			t.Errorf("GetStatusCode(*CodeErr) = %d, want %d", got, http.StatusInternalServerError)

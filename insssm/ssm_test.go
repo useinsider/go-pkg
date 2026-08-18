@@ -12,8 +12,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/ssm"
 )
 
-// stubSSM implements the (unexported) ssmClient interface of go-aws-ssm, which
-// NewParameterStoreWithClient accepts — the only DI seam this package has.
 type stubSSM struct {
 	mu     sync.Mutex
 	calls  map[string]int
@@ -74,7 +72,6 @@ func TestInit(t *testing.T) {
 		t.Cleanup(func() { ParameterStore = prev })
 		ParameterStore = nil
 
-		// Creating the AWS session does not require credentials or network.
 		t.Setenv("ENV", "TEST")
 		Init()
 
