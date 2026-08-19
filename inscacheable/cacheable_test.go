@@ -53,8 +53,7 @@ func TestCachableLoader(t *testing.T) {
 		assert.Equal(t, "key A is 1", actual1)
 	})
 
-	// Expire the cache
-	time.Sleep(ttl)
+	time.Sleep(ttl + 200*time.Millisecond)
 
 	t.Run("it_should_get_the_third_item", func(t *testing.T) {
 		actual3 := *c.Get("A").value

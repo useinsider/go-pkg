@@ -1,0 +1,32 @@
+name: Unit Tests
+
+on: push
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  unit-tests:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.26.x
+
+      - name: Run tests with merged coverage
+        run: |
+          chmod +x scripts/coverage.sh
+          COVERAGE_OUT="$GITHUB_WORKSPACE/coverage.out" ./scripts/coverage.sh
+
+      - name: Upload coverage to coverus
+        uses: useinsider/coverus-action@v2
+        with:
+          coverage-format: golang
+          coverage-file: coverage.out
+          golang-module-name: github.com/useinsider/go-pkg
+          track-slug: unit-tests
