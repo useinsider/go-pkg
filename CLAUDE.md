@@ -49,7 +49,7 @@ The config is the v2 schema; do not add a v1-format file.
 
 | Check | Workflow | Trigger | Required (once PA-40353 Task 6 lands) |
 |---|---|---|---|
-| `golangci-lint` | `.github/workflows/lint.yml` | push + PR | yes |
+| `golangci-lint` | `.github/workflows/lint.yml` | push (develop, master) + PR | yes |
 | `unit-tests` | `.github/workflows/unit-tests.yml` | push | yes |
 | `AI Code Review` | `.github/workflows/ai-code-review.yml` | PR | no |
 | `AI Test Coverage` | `.github/workflows/ai-test-coverage.yml` | PR | no |

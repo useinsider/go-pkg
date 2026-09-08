@@ -1,7 +1,15 @@
 name: Lint
 
 on:
+  # Scoped to the default branches on purpose. An unfiltered push trigger fires
+  # a SECOND run for every PR commit, in a different concurrency group from the
+  # pull_request run, so neither cancels the other; on a self-hosted pool the
+  # duplicate queues and is reclaimed, leaving a red cancelled check on the PR.
+  # The dashboard only needs a run on the default-branch head, which this gives.
   push:
+    branches:
+      - develop
+      - master
   pull_request:
 
 permissions:
