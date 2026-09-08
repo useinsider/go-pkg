@@ -2,12 +2,15 @@ package insrequester
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/slok/goresilience"
+	goresilienceErrors "github.com/slok/goresilience/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -171,5 +174,24 @@ func TestRequest_ConfigDefaults(t *testing.T) {
 	t.Run("it_should_keep_explicit_timeout", func(t *testing.T) {
 		r := NewRequester().WithTimeout(5 * time.Second)
 		assert.Equal(t, 5*time.Second, r.timeout)
+	})
+}
+
+func TestRequest_TimeoutBranch(t *testing.T) {
+	t.Run("it_should_return_err_timeout_when_the_runner_reports_a_timeout", func(t *testing.T) {
+		// WithTimeout drives the http.Client deadline, which surfaces as a
+		// transport error -- not as this branch. The branch translates
+		// goresilience's OWN ErrTimeout, which only the runner can raise, so the
+		// runner is stubbed directly. Wrapped, to prove the check uses errors.Is
+		// rather than equality.
+		r := NewRequester().Load()
+		r.runner = goresilience.RunnerFunc(func(_ context.Context, _ goresilience.Func) error {
+			return fmt.Errorf("runner gave up: %w", goresilienceErrors.ErrTimeout)
+		})
+
+		_, err := r.Get(context.Background(), RequestEntity{Endpoint: "http://127.0.0.1:1"})
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrTimeout)
 	})
 }

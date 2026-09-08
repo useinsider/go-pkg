@@ -2,6 +2,7 @@ package inskinesis
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -327,6 +328,17 @@ func TestCustomRetryer_ShouldRetry(t *testing.T) {
 		assert.True(t, retryer.ShouldRetry(req))
 	})
 
+	t.Run("it_should_retry_on_wrapped_net_timeout", func(t *testing.T) {
+		req := &request.Request{Error: fmt.Errorf("dial tcp: %w", timeoutNetError{})}
+		assert.True(t, retryer.ShouldRetry(req), "a wrapped net.Error timeout must still be retried")
+	})
+
+	t.Run("it_should_retry_on_wrapped_connection_reset", func(t *testing.T) {
+		opErr := &net.OpError{Op: "read", Err: errors.New("read: connection reset by peer")}
+		req := &request.Request{Error: fmt.Errorf("putting records: %w", opErr)}
+		assert.True(t, retryer.ShouldRetry(req), "a wrapped *net.OpError connection reset must still be retried")
+	})
+
 	t.Run("it_should_delegate_other_errors_to_default_retryer", func(t *testing.T) {
 		req := &request.Request{
 			Error:     errors.New("some other failure"),
@@ -412,5 +424,39 @@ func TestFakeStream(t *testing.T) {
 
 		assert.Equal(t, `{"b":"2"}`, js)
 		assert.Equal(t, map[string]string{"b": "2"}, target)
+	})
+}
+
+func TestStream_sendSingleBatch_concurrentFailures(t *testing.T) {
+	t.Run("it_should_sum_every_failed_record_when_batches_are_sent_concurrently", func(t *testing.T) {
+		const (
+			records         = 20
+			recordsPerBatch = 2
+		)
+
+		ctrl := gomock.NewController(t)
+		mockKinesis := NewMockKinesisInterface(ctrl)
+
+		s := newTestStream(mockKinesis, recordsPerBatch-1)
+		s.maxGroup = 10 // the MaxGroup the README documents; anything above 1 reaches the concurrent path
+		s.verbose = false
+		s.start()
+
+		mockKinesis.EXPECT().
+			PutRecords(gomock.Any()).
+			Times(records / recordsPerBatch).
+			DoAndReturn(func(*kinesis.PutRecordsInput) (*kinesis.PutRecordsOutput, error) {
+				// Hold the concurrency slot so the batches genuinely overlap.
+				time.Sleep(5 * time.Millisecond)
+				return nil, errors.New("kinesis unavailable")
+			})
+
+		for i := 0; i < records; i++ {
+			s.Put(map[string]int{"i": i})
+		}
+
+		s.FlushAndStopStreaming()
+
+		assert.Equal(t, int64(records), s.failedCount.Load())
 	})
 }
