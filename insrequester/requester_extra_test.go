@@ -194,4 +194,19 @@ func TestRequest_TimeoutBranch(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrTimeout)
 	})
+
+	t.Run("it_should_return_err_circuit_breaker_open_when_the_runner_reports_a_wrapped_open_circuit", func(t *testing.T) {
+		// The sibling of the timeout case. The three existing circuit tests pass
+		// the bare sentinel, so they also pass under the previous == comparison;
+		// only a WRAPPED error demonstrates that the errors.Is widening works.
+		r := NewRequester().Load()
+		r.runner = goresilience.RunnerFunc(func(_ context.Context, _ goresilience.Func) error {
+			return fmt.Errorf("breaker: %w", goresilienceErrors.ErrCircuitOpen)
+		})
+
+		_, err := r.Get(context.Background(), RequestEntity{Endpoint: "http://127.0.0.1:1"})
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrCircuitBreakerOpen)
+	})
 }
