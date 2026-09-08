@@ -44,9 +44,18 @@
   `t.Helper()` (`thelper`); type assertions use the two-value form
   (`forcetypeassert`); unused handler params are `_` (`revive`); helper
   parameters that every caller passes the same value for get removed
-  (`unparam`). `bodyclose` is excluded for `_test.go` files because the
-  requester tests exercise error paths where the response is nil by
-  contract.
+  (`unparam`). `bodyclose` is excluded only for the two `insrequester`
+  modules' test files (about 60 call sites, many on error paths where the
+  response is nil by contract, so each would need its own conditional
+  close — not worth the churn in a lint PR); every other module's tests
+  must close response bodies.
+- Tests against a local `httptest.Server` must not use a client timeout in
+  the low-millisecond range unless the timeout *is* what is being tested:
+  a 1 ms deadline can beat the response under `-race` and turns a
+  deterministic assertion into a ~5% flake (seen in both `insrequester`
+  modules' "last error" cases and fixed in PA-40353). Likewise, never
+  assert a fixed order on a slice built from a map — use
+  `assert.ElementsMatch`.
 
 ## Fakes vs. mocks
 

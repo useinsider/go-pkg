@@ -308,6 +308,12 @@ func (timeoutNetError) Error() string   { return "i/o timeout" }
 func (timeoutNetError) Timeout() bool   { return true }
 func (timeoutNetError) Temporary() bool { return true }
 
+type nonTimeoutNetError struct{}
+
+func (nonTimeoutNetError) Error() string   { return "network unreachable" }
+func (nonTimeoutNetError) Timeout() bool   { return false }
+func (nonTimeoutNetError) Temporary() bool { return false }
+
 func TestCustomRetryer_ShouldRetry(t *testing.T) {
 	retryer := CustomRetryer{Retryer: client.DefaultRetryer{NumMaxRetries: 3}}
 
@@ -327,6 +333,22 @@ func TestCustomRetryer_ShouldRetry(t *testing.T) {
 			Retryable: aws.Bool(false),
 		}
 		assert.False(t, retryer.ShouldRetry(req))
+	})
+
+	t.Run("it_should_not_retry_on_net_error_that_is_not_a_timeout", func(t *testing.T) {
+		req := &request.Request{
+			Error:     nonTimeoutNetError{},
+			Retryable: aws.Bool(false),
+		}
+		assert.False(t, retryer.ShouldRetry(req), "a net.Error must only be retried when Timeout() is true")
+	})
+
+	t.Run("it_should_not_retry_on_op_error_with_other_message", func(t *testing.T) {
+		req := &request.Request{
+			Error:     &net.OpError{Op: "write", Err: errors.New("broken pipe")},
+			Retryable: aws.Bool(false),
+		}
+		assert.False(t, retryer.ShouldRetry(req), "an *net.OpError must only be retried on connection reset by peer")
 	})
 }
 

@@ -124,7 +124,10 @@ func TestRequest_Get(t *testing.T) {
 		}))
 		defer ts.Close()
 
-		r := NewRequester().WithTimeout(1 * time.Millisecond).
+		// The timeout must comfortably exceed a local round trip: this case
+		// asserts that the last 500 body reaches the caller, and a client
+		// deadline that beats the response replaces it with a transport error.
+		r := NewRequester().WithTimeout(time.Second).
 			WithRetry(RetryConfig{
 				WaitBase: 20 * time.Millisecond,
 				Times:    4,

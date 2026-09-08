@@ -54,4 +54,6 @@
   (`nilnil`/`nilerr` enforce this. The one intentional exception is the
   request-build path inside `insrequester`'s retry closure, which returns
   nil so the policy does not retry an unbuildable request and surfaces the
-  error via `outerErr`; it is excluded by path in `.golangci.yaml`.)
+  error via `outerErr`; `.golangci.yaml` exempts only that statement shape
+  (`return nil` / `return nil, nil`) in the two `requester.go` files via a
+  `source:` matcher, so other error-swallowing returns there still fail.)

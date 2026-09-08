@@ -67,27 +67,48 @@ linters:
           - errname
         path: inscodeerr/err\.go$
         text: 'CodeErr'
-      # Test files drive the requester's error paths on purpose, where the
-      # returned *http.Response is nil by http.Client contract and there is no
-      # body to close. Each test's httptest.Server is closed by defer; the
-      # process exits with the test run.
+      # insrequester's tests call Get/Post/... about 60 times without closing
+      # the response body. Many of those sites drive error paths where the
+      # response is nil by http.Client contract, so a blanket
+      # "defer res.Body.Close()" would nil-deref and each site needs its own
+      # conditional close. That churn was judged not worth it in a lint PR
+      # (PA-40353); the httptest servers are closed by defer and the process
+      # exits with the run. Scoped to the two requester modules' test files
+      # only — every other module's tests keep bodyclose armed.
       - linters:
           - bodyclose
-        path: _test\.go$
+        path: insrequester/(v3/)?[^/]*_test\.go$
       # insrequester's sendRequest hands the *http.Response back to the caller,
       # who owns Body.Close(); the retryable-status path closes it itself.
       # bodyclose cannot follow the response through the retry closure (v1
       # assigns it to a captured variable) and is fooled by failsafe-go's
       # generic builders typed on *http.Response (v3), so it reports the
-      # builder chain and the executor as unclosed bodies. contextcheck cannot
-      # see that exec.Context() derives from the ctx passed to WithContext.
-      # nilerr/nilnil: the closure deliberately returns nil (v3: nil, nil) for
-      # a request-build error so the retry/circuit-breaker policy does not
-      # retry an unbuildable request; the error is surfaced through outerErr
-      # right after.
+      # builder chain and the executor as unclosed bodies. File-scoped because
+      # bodyclose reports on the http.Client.Do call and on every generic
+      # builder line, which no source matcher can pin down precisely.
       - linters:
           - bodyclose
-          - contextcheck
-          - nilerr
-          - nilnil
         path: insrequester/(v3/)?requester\.go$
+      # contextcheck cannot see that exec.Context() inside the failsafe-go
+      # GetWithExecution closure derives from the ctx handed to WithContext(ctx)
+      # on the line above. Only v3 uses failsafe-go; v1 is not exempt.
+      # File-scoped because the finding is attributed to the closure as a
+      # whole ("sendRequest$2"), not to a matchable source line.
+      - linters:
+          - contextcheck
+        path: insrequester/v3/requester\.go$
+      # nilerr: the request-build early return in the retry closure returns nil
+      # on purpose — v1's goresilience retry has no abort-on-error, so returning
+      # the error would retry an unbuildable request. The error is surfaced via
+      # outerErr right after. Narrowed to that exact statement shape; any other
+      # error-swallowing return in these files is still reported.
+      - linters:
+          - nilerr
+        path: insrequester/(v3/)?requester\.go$
+        source: '^\s*return nil(, nil)?$'
+      # nilnil: the same deliberate early return in v3 ("return nil, nil");
+      # the *http.Response is discarded and the error travels via outerErr.
+      - linters:
+          - nilnil
+        path: insrequester/v3/requester\.go$
+        source: '^\s*return nil, nil$'
