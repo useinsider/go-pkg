@@ -5,7 +5,13 @@ on:
       - develop
 jobs:
   mysql-check:
-    runs-on: self-hosted
+    # Same runner block as lint.yml, unit-tests.yml and security_allinone.yml,
+    # so all four self-hosted workflows here are configured identically. See
+    # the note in lint.yml: go-pkg has no runner-group access, so this job
+    # queues like the rest until an org admin grants it.
+    runs-on:
+      group: default
+      labels: self-hosted
     steps:
       - name: Create GitHub App token
         id: github-app-token

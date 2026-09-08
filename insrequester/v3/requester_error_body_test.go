@@ -1,7 +1,6 @@
 package insrequester
 
 import (
-	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -63,7 +62,7 @@ func TestRequest_sendRequestEmptyErrorBody(t *testing.T) {
 
 		r := NewRequester().WithRetry(RetryConfig{WaitBase: 5 * time.Millisecond, Times: 1}).Load()
 
-		_, err := r.Get(context.Background(), RequestEntity{Endpoint: ts.URL})
+		_, err := r.Get(t.Context(), RequestEntity{Endpoint: ts.URL})
 
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrRetriesExhausted)
@@ -78,7 +77,7 @@ func TestRequest_sendRequestEmptyErrorBody(t *testing.T) {
 
 		r := NewRequester().WithRetry(RetryConfig{WaitBase: 5 * time.Millisecond, Times: 1}).Load()
 
-		_, err := r.Get(context.Background(), RequestEntity{Endpoint: ts.URL})
+		_, err := r.Get(t.Context(), RequestEntity{Endpoint: ts.URL})
 
 		require.Error(t, err)
 		assert.NotContains(t, err.Error(), " : ")
