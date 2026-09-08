@@ -30,7 +30,13 @@ jobs:
     # context list would churn on every module added. The name also carries the
     # "golangci"/"lint" token the Service Maturity tokenizer matches.
     name: golangci-lint
-    runs-on: self-hosted
+    # The bare self-hosted label does not reliably pick jobs up in this repo:
+    # the last two unit-tests runs on develop were cancelled while queued, and
+    # both jobs on PR #79 sat queued on it. This is the form go-pkg-private
+    # moved to for the same reason, and its jobs schedule immediately.
+    runs-on:
+      group: default
+      labels: self-hosted
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4

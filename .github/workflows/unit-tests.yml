@@ -17,7 +17,13 @@ concurrency:
 
 jobs:
   unit-tests:
-    runs-on: self-hosted
+    # The bare self-hosted label does not reliably pick jobs up in this repo:
+    # the last two unit-tests runs on develop were cancelled while queued, and
+    # both jobs on PR #79 sat queued on it. This is the form go-pkg-private
+    # moved to for the same reason, and its jobs schedule immediately.
+    runs-on:
+      group: default
+      labels: self-hosted
     steps:
       - name: Checkout
         uses: actions/checkout@v4
