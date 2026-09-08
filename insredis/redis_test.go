@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-
 func TestInit(t *testing.T) {
 	redisClient = nil
 
@@ -19,15 +18,19 @@ func TestInit(t *testing.T) {
 		if opts.Addr != "localhost:6379" {
 			t.Errorf("Addr = %q, want localhost:6379", opts.Addr)
 		}
+
 		if opts.PoolSize != 10 {
 			t.Errorf("PoolSize = %d, want default 10", opts.PoolSize)
 		}
+
 		if opts.DialTimeout != 500*time.Millisecond {
 			t.Errorf("DialTimeout = %v, want default 500ms", opts.DialTimeout)
 		}
+
 		if opts.ReadTimeout != 500*time.Millisecond {
 			t.Errorf("ReadTimeout = %v, want default 500ms", opts.ReadTimeout)
 		}
+
 		if opts.MaxRetries != 0 {
 			t.Errorf("MaxRetries = %d, want 0 (no default applied)", opts.MaxRetries)
 		}
@@ -40,6 +43,7 @@ func TestInit(t *testing.T) {
 		if client != first {
 			t.Error("Init() second call returned a new client, want the cached singleton")
 		}
+
 		if client.Options().Addr != "localhost:6379" {
 			t.Errorf("Addr = %q, want the original localhost:6379 (new config ignored)", client.Options().Addr)
 		}

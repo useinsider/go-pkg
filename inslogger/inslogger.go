@@ -137,6 +137,7 @@ func (al *AppLogger) initLogger() error {
 		if err != nil {
 			return err
 		}
+
 		newLogger = newLogger.WithOptions(zap.IncreaseLevel(zap.DebugLevel))
 	case Info:
 		newLogger = newLogger.WithOptions(zap.IncreaseLevel(zap.InfoLevel))

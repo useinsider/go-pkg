@@ -3,6 +3,7 @@ package inskinesis
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 )
 
 type FakeStream struct {
@@ -15,8 +16,9 @@ type FakeStream struct {
 func (s *FakeStream) Put(v interface{}) {
 	js, err := json.Marshal(v)
 	if err != nil {
-		println(fmt.Sprintf("Error marshalling in fake kinesis %v", v))
+		fmt.Fprintf(os.Stderr, "Error marshalling in fake kinesis %v\n", v)
 	}
+
 	s.Data = append(s.Data, string(js))
 	if s.Stream != nil {
 		s.Stream.Put(v)
@@ -35,9 +37,11 @@ func (s *FakeStream) Datum(i int, r interface{}) string {
 	if i < 0 {
 		i = len(s.Data) + i
 	}
+
 	d := s.Data[i]
 	if r != nil {
 		_ = json.Unmarshal([]byte(d), &r)
 	}
+
 	return d
 }

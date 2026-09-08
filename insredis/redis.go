@@ -162,8 +162,8 @@ type RedisInterface interface {
 	ZIncrNX(key string, member redis.Z) *redis.FloatCmd
 	ZIncrXX(key string, member redis.Z) *redis.FloatCmd
 	ZCard(key string) *redis.IntCmd
-	ZCount(key, min, max string) *redis.IntCmd
-	ZLexCount(key, min, max string) *redis.IntCmd
+	ZCount(key, minVal, maxVal string) *redis.IntCmd
+	ZLexCount(key, minVal, maxVal string) *redis.IntCmd
 	ZIncrBy(key string, increment float64, member string) *redis.FloatCmd
 	ZInterStore(destination string, store redis.ZStore, keys ...string) *redis.IntCmd
 	ZPopMax(key string, count ...int64) *redis.ZSliceCmd
@@ -176,8 +176,8 @@ type RedisInterface interface {
 	ZRank(key, member string) *redis.IntCmd
 	ZRem(key string, members ...interface{}) *redis.IntCmd
 	ZRemRangeByRank(key string, start, stop int64) *redis.IntCmd
-	ZRemRangeByScore(key, min, max string) *redis.IntCmd
-	ZRemRangeByLex(key, min, max string) *redis.IntCmd
+	ZRemRangeByScore(key, minVal, maxVal string) *redis.IntCmd
+	ZRemRangeByLex(key, minVal, maxVal string) *redis.IntCmd
 	ZRevRange(key string, start, stop int64) *redis.StringSliceCmd
 	ZRevRangeWithScores(key string, start, stop int64) *redis.ZSliceCmd
 	ZRevRangeByScore(key string, opt redis.ZRangeBy) *redis.StringSliceCmd
@@ -237,12 +237,12 @@ type RedisInterface interface {
 	ClusterCountFailureReports(nodeID string) *redis.IntCmd
 	ClusterCountKeysInSlot(slot int) *redis.IntCmd
 	ClusterDelSlots(slots ...int) *redis.StatusCmd
-	ClusterDelSlotsRange(min, max int) *redis.StatusCmd
+	ClusterDelSlotsRange(minSlot, maxSlot int) *redis.StatusCmd
 	ClusterSaveConfig() *redis.StatusCmd
 	ClusterSlaves(nodeID string) *redis.StringSliceCmd
 	ClusterFailover() *redis.StatusCmd
 	ClusterAddSlots(slots ...int) *redis.StatusCmd
-	ClusterAddSlotsRange(min, max int) *redis.StatusCmd
+	ClusterAddSlotsRange(minSlot, maxSlot int) *redis.StatusCmd
 	GeoAdd(key string, geoLocation ...*redis.GeoLocation) *redis.IntCmd
 	GeoPos(key string, members ...string) *redis.GeoPosCmd
 	GeoRadius(key string, longitude, latitude float64, query *redis.GeoRadiusQuery) *redis.GeoLocationCmd

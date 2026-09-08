@@ -42,6 +42,7 @@ func createString(byteSize int) string {
 	for i := 0; i < byteSize; i++ {
 		str += "a"
 	}
+
 	return str
 }
 

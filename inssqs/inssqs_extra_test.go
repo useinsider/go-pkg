@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -19,12 +18,10 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func newFakeSQSServer(t *testing.T, getQueueUrlStatus int) (*httptest.Server, *int32) {
+func newFakeSQSServer(t *testing.T, getQueueURLStatus int) *httptest.Server {
 	t.Helper()
-	var calls int32
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&calls, 1)
 		body, _ := io.ReadAll(r.Body)
 		_ = body
 
@@ -33,11 +30,13 @@ func newFakeSQSServer(t *testing.T, getQueueUrlStatus int) (*httptest.Server, *i
 
 		switch {
 		case strings.HasSuffix(target, "GetQueueUrl"):
-			if getQueueUrlStatus != http.StatusOK {
-				w.WriteHeader(getQueueUrlStatus)
+			if getQueueURLStatus != http.StatusOK {
+				w.WriteHeader(getQueueURLStatus)
 				_, _ = w.Write([]byte(`{"__type":"com.amazonaws.sqs#QueueDoesNotExist","message":"no such queue"}`))
+
 				return
 			}
+
 			_ = json.NewEncoder(w).Encode(map[string]string{"QueueUrl": "https://sqs.test/queue"})
 		case strings.HasSuffix(target, "SendMessageBatch"):
 			_, _ = w.Write([]byte(`{"Successful":[{"Id":"test-id","MessageId":"m-1","MD5OfMessageBody":"841a2d689ad86bd1611447453c22c6fc"}],"Failed":[]}`))
@@ -49,7 +48,7 @@ func newFakeSQSServer(t *testing.T, getQueueUrlStatus int) (*httptest.Server, *i
 	}))
 	t.Cleanup(ts.Close)
 
-	return ts, &calls
+	return ts
 }
 
 func setFakeAWSEnv(t *testing.T) {
@@ -109,14 +108,17 @@ func TestNewSQS(t *testing.T) {
 		defer func() {
 			r := recover()
 			require.NotNil(t, r, "NewSQS must panic when LoadDefaultConfig fails")
-			assert.Contains(t, r.(error).Error(), "error while loading aws sqs config")
+
+			err, ok := r.(error)
+			require.True(t, ok, "panic value must be an error")
+			assert.Contains(t, err.Error(), "error while loading aws sqs config")
 		}()
 		NewSQS(Config{Region: "eu-west-1", QueueName: "q"})
 	})
 
 	t.Run("it_should_build_queue_with_nop_logger_by_default", func(t *testing.T) {
 		setFakeAWSEnv(t)
-		ts, _ := newFakeSQSServer(t, http.StatusOK)
+		ts := newFakeSQSServer(t, http.StatusOK)
 
 		q := NewSQS(Config{
 			Region:      "eu-west-1",
@@ -132,7 +134,7 @@ func TestNewSQS(t *testing.T) {
 
 	t.Run("it_should_build_queue_with_leveled_logger_when_log_level_set", func(t *testing.T) {
 		setFakeAWSEnv(t)
-		ts, _ := newFakeSQSServer(t, http.StatusOK)
+		ts := newFakeSQSServer(t, http.StatusOK)
 
 		q := NewSQS(Config{
 			Region:      "eu-west-1",
@@ -146,12 +148,15 @@ func TestNewSQS(t *testing.T) {
 
 	t.Run("it_should_panic_when_queue_url_cannot_be_resolved", func(t *testing.T) {
 		setFakeAWSEnv(t)
-		ts, _ := newFakeSQSServer(t, http.StatusBadRequest)
+		ts := newFakeSQSServer(t, http.StatusBadRequest)
 
 		defer func() {
 			r := recover()
 			require.NotNil(t, r, "NewSQS must panic when GetQueueUrl keeps failing")
-			assert.Contains(t, r.(error).Error(), "error while getting queue url")
+
+			err, ok := r.(error)
+			require.True(t, ok, "panic value must be an error")
+			assert.Contains(t, err.Error(), "error while getting queue url")
 		}()
 		NewSQS(Config{
 			Region:      "eu-west-1",
@@ -213,7 +218,7 @@ func TestQueue_deleteMessageBatch_edgeCases(t *testing.T) {
 func Test_getRequestAttemptCount_withRealMetadata(t *testing.T) {
 	t.Run("it_should_count_attempts_from_sdk_metadata", func(t *testing.T) {
 		setFakeAWSEnv(t)
-		ts, _ := newFakeSQSServer(t, http.StatusOK)
+		ts := newFakeSQSServer(t, http.StatusOK)
 
 		client := awssqs.New(awssqs.Options{
 			Region:       "eu-west-1",

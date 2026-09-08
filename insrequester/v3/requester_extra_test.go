@@ -21,6 +21,8 @@ func TestRequest_Methods(t *testing.T) {
 		{
 			name: "it_should_send_put",
 			call: func(t *testing.T, r Requester, re RequestEntity) (*http.Response, error) {
+				t.Helper()
+
 				return r.Put(t.Context(), re)
 			},
 			want: http.MethodPut,
@@ -28,6 +30,8 @@ func TestRequest_Methods(t *testing.T) {
 		{
 			name: "it_should_send_delete",
 			call: func(t *testing.T, r Requester, re RequestEntity) (*http.Response, error) {
+				t.Helper()
+
 				return r.Delete(t.Context(), re)
 			},
 			want: http.MethodDelete,
@@ -37,8 +41,10 @@ func TestRequest_Methods(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var method string
+
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				method = r.Method
+
 				w.WriteHeader(http.StatusOK)
 			}))
 			defer ts.Close()
@@ -67,7 +73,7 @@ func TestRequest_sendRequestEdgeCases(t *testing.T) {
 		defer ts.Close()
 
 		client := &http.Client{
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 				return errors.New("redirects are forbidden")
 			},
 		}
@@ -82,7 +88,8 @@ func TestRequest_sendRequestEdgeCases(t *testing.T) {
 
 	t.Run("it_should_truncate_oversized_error_bodies", func(t *testing.T) {
 		big := strings.Repeat("x", 5000)
-		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			_, _ = w.Write([]byte(big))
 		}))

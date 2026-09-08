@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws/client"
 	"math"
+	"os"
 	"sync"
 	"time"
 
@@ -51,7 +52,6 @@ type stream struct {
 	retryCount    int           // Maximum number of retries for failed record submissions.
 	retryWaitTime time.Duration // Time to wait between retries for failed record submissions.
 
-	mu               sync.Mutex         // Mutex to synchronize access to the stream.
 	wgLogChan        *sync.WaitGroup    // WaitGroup to manage goroutines.
 	wgBatchChan      *sync.WaitGroup    // WaitGroup to manage goroutines.
 	logChannel       chan interface{}   // Channel for receiving individual log records.
@@ -89,7 +89,9 @@ func NewKinesis(config Config) (StreamInterface, error) {
 	if config.StreamName == "" {
 		return nil, errors.New("stream name is required")
 	}
+
 	awsConfig := aws.Config{Region: aws.String(config.Region)}
+
 	awsSession, err := session.NewSession(&awsConfig)
 	if err != nil {
 		return nil, err
@@ -167,6 +169,7 @@ func (s *stream) startStreaming() {
 		select {
 		case record := <-s.logChannel:
 			s.totalCount++
+
 			s.logBuffer = append(s.logBuffer, record)
 			if len(s.logBuffer) > s.logBufferSize {
 				batch := s.logBuffer
@@ -177,7 +180,9 @@ func (s *stream) startStreaming() {
 					if len(s.errChannel) < errorChannelSize {
 						s.errChannel <- err
 					}
+
 					s.wgLogChan.Done()
+
 					continue
 				}
 
@@ -191,6 +196,7 @@ func (s *stream) startStreaming() {
 		case <-s.stopChannel:
 			s.stopAndWaitBatchStreaming()
 			s.wgLogChan.Done()
+
 			return
 		}
 	}
@@ -212,6 +218,7 @@ func (s *stream) stopAndWaitLogStreaming() {
 
 func (s *stream) startBatchStreaming() {
 	concurrentLimiter := make(chan struct{}, s.maxGroup)
+
 	for {
 		select {
 		case batch := <-s.batchChannel:
@@ -231,6 +238,7 @@ func (s *stream) startBatchStreaming() {
 
 				for _, b := range batches {
 					s.wgBatchChan.Add(1)
+
 					batch := b
 					s.sendSingleBatch(batch, concurrentLimiter)
 				}
@@ -243,6 +251,7 @@ func (s *stream) startBatchStreaming() {
 
 func (s *stream) sendSingleBatch(batch []interface{}, concurrentLimiter chan struct{}) {
 	concurrentLimiter <- struct{}{}
+
 	go func() {
 		defer func() {
 			s.wgBatchChan.Done()
@@ -251,8 +260,10 @@ func (s *stream) sendSingleBatch(batch []interface{}, concurrentLimiter chan str
 
 		failedCount, err := s.PutRecords(batch)
 		s.failedCount += failedCount
+
 		if err != nil {
 			s.printf("Error sending records to Kinesis stream %s: %v\n", s.name, err)
+
 			if len(s.errChannel) < errorChannelSize {
 				s.errChannel <- err
 			}
@@ -295,6 +306,7 @@ func (s *stream) Put(record interface{}) {
 
 func (s *stream) putRecords(batch []*kinesis.PutRecordsRequestEntry, retryCount int) (int, error) {
 	s.printf("Sending %d records to Kinesis stream %s\n", len(batch), s.name)
+
 	if retryCount < 0 {
 		s.printf("Retry count exceeded for Kinesis stream %s\n", s.name)
 		return len(batch), errors.New("retry count exceeded")
@@ -318,23 +330,28 @@ func (s *stream) putRecords(batch []*kinesis.PutRecordsRequestEntry, retryCount 
 
 		s.printf("Retrying %d records to Kinesis stream %s\n", len(batch), s.name)
 		time.Sleep(s.retryWaitTime)
+
 		failed, err := s.putRecords(batch, retryCount)
 		if err != nil {
 			return failed, err
 		}
 	}
+
 	return 0, err
 }
 
 func (s *stream) transformRecords(records []interface{}) ([]*kinesis.PutRecordsRequestEntry, error) {
 	var transformedRecords []*kinesis.PutRecordsRequestEntry
+
 	failedRecords := 0
+
 	var err error
+
 	var js []byte
 	for _, record := range records {
 		js, err = json.Marshal(record)
 		if err != nil {
-			failedRecords += 1
+			failedRecords++
 			continue
 		}
 
@@ -390,6 +407,6 @@ func addOutputSeparatorIfNeeded(record []byte) []byte {
 // custom printf if verbose mode is enabled
 func (s *stream) printf(format string, a ...interface{}) {
 	if s.verbose {
-		fmt.Printf(format, a...)
+		fmt.Fprintf(os.Stdout, format, a...)
 	}
 }

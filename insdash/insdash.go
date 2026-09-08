@@ -40,6 +40,7 @@ func Contains[T comparable](v []T, e T) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -48,5 +49,6 @@ func MapToValueSlice[K comparable, V any](m map[K]V) []V {
 	for _, value := range m {
 		v = append(v, value)
 	}
+
 	return v
 }

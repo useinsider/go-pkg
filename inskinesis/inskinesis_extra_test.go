@@ -20,7 +20,7 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func newTestStream(kc KinesisInterface, logBufferSize, maxGroup int) *stream {
+func newTestStream(kc KinesisInterface, logBufferSize int) *stream {
 	return &stream{
 		region:        "eu-west-1",
 		name:          "test-stream",
@@ -30,7 +30,7 @@ func newTestStream(kc KinesisInterface, logBufferSize, maxGroup int) *stream {
 		logBufferSize:          logBufferSize,
 		maxStreamBatchSize:     100,
 		maxStreamBatchByteSize: 1 << 16,
-		maxGroup:               maxGroup,
+		maxGroup:               1,
 
 		wgLogChan:        &sync.WaitGroup{},
 		wgBatchChan:      &sync.WaitGroup{},
@@ -88,7 +88,7 @@ func TestNewKinesis(t *testing.T) {
 
 func Test_kinesisProxy_PutRecords(t *testing.T) {
 	t.Run("it_should_forward_to_the_kinesis_client", func(t *testing.T) {
-		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/x-amz-json-1.1")
 			_, _ = w.Write([]byte(`{"FailedRecordCount":0,"Records":[]}`))
 		}))
@@ -119,7 +119,7 @@ func TestStream_PutAndFlush(t *testing.T) {
 	t.Run("it_should_flush_pending_buffer_on_stop", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mockKinesis := NewMockKinesisInterface(ctrl)
-		s := newTestStream(mockKinesis, 100, 1)
+		s := newTestStream(mockKinesis, 100)
 		s.start()
 
 		mockKinesis.EXPECT().
@@ -138,7 +138,7 @@ func TestStream_PutAndFlush(t *testing.T) {
 	t.Run("it_should_flush_mid_stream_when_buffer_size_exceeded", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mockKinesis := NewMockKinesisInterface(ctrl)
-		s := newTestStream(mockKinesis, 2, 1)
+		s := newTestStream(mockKinesis, 2)
 		s.start()
 
 		mockKinesis.EXPECT().
@@ -149,6 +149,7 @@ func TestStream_PutAndFlush(t *testing.T) {
 		for i := 0; i < 4; i++ {
 			s.Put(map[string]int{"i": i})
 		}
+
 		s.FlushAndStopStreaming()
 
 		assert.Equal(t, 4, s.totalCount)
@@ -157,7 +158,7 @@ func TestStream_PutAndFlush(t *testing.T) {
 	t.Run("it_should_stop_cleanly_with_empty_buffer", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mockKinesis := NewMockKinesisInterface(ctrl)
-		s := newTestStream(mockKinesis, 100, 1)
+		s := newTestStream(mockKinesis, 100)
 		s.start()
 
 		s.FlushAndStopStreaming()
@@ -168,7 +169,7 @@ func TestStream_PutAndFlush(t *testing.T) {
 	t.Run("it_should_report_batching_error_for_unmarshalable_records", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mockKinesis := NewMockKinesisInterface(ctrl)
-		s := newTestStream(mockKinesis, 1, 1)
+		s := newTestStream(mockKinesis, 1)
 		s.start()
 
 		s.Put(make(chan int))
@@ -185,7 +186,7 @@ func TestStream_PutAndFlush(t *testing.T) {
 	t.Run("it_should_forward_send_errors_to_error_channel", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mockKinesis := NewMockKinesisInterface(ctrl)
-		s := newTestStream(mockKinesis, 100, 1)
+		s := newTestStream(mockKinesis, 100)
 		s.start()
 
 		mockKinesis.EXPECT().
@@ -210,7 +211,7 @@ func TestStream_PutRecords(t *testing.T) {
 	t.Run("it_should_send_transformed_batch", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mockKinesis := NewMockKinesisInterface(ctrl)
-		s := newTestStream(mockKinesis, 100, 1)
+		s := newTestStream(mockKinesis, 100)
 
 		mockKinesis.EXPECT().
 			PutRecords(gomock.Any()).
@@ -224,7 +225,7 @@ func TestStream_PutRecords(t *testing.T) {
 
 	t.Run("it_should_return_batch_size_when_transform_fails_entirely", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
-		s := newTestStream(NewMockKinesisInterface(ctrl), 100, 1)
+		s := newTestStream(NewMockKinesisInterface(ctrl), 100)
 
 		batch := []interface{}{make(chan int)}
 		failed, err := s.PutRecords(batch)
@@ -238,7 +239,7 @@ func Test_putRecords_retryExceeded(t *testing.T) {
 	t.Run("it_should_stop_when_retry_count_negative", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mockKinesis := NewMockKinesisInterface(ctrl)
-		s := newTestStream(mockKinesis, 100, 1)
+		s := newTestStream(mockKinesis, 100)
 
 		failed, err := s.putRecords([]*kinesis.PutRecordsRequestEntry{
 			{Data: []byte("r\n"), PartitionKey: aws.String(testPartition)},
@@ -251,7 +252,7 @@ func Test_putRecords_retryExceeded(t *testing.T) {
 
 func Test_transformRecords_partialFailure(t *testing.T) {
 	t.Run("it_should_silently_drop_failed_record_when_later_record_succeeds", func(t *testing.T) {
-		s := newTestStream(nil, 100, 1)
+		s := newTestStream(nil, 100)
 
 		records := []interface{}{
 			make(chan int),
@@ -333,6 +334,7 @@ func TestPartitioners_UUID(t *testing.T) {
 	t.Run("it_should_generate_distinct_uuids", func(t *testing.T) {
 		a := Partitioners.UUID(nil)
 		b := Partitioners.UUID(nil)
+
 		assert.NotEmpty(t, a)
 		assert.NotEqual(t, a, b)
 	})
@@ -366,7 +368,7 @@ func TestFakeStream(t *testing.T) {
 		assert.Equal(t, "", s.Data[0])
 	})
 
-	t.Run("it_should_do_nothing_on_Get", func(t *testing.T) {
+	t.Run("it_should_do_nothing_on_Get", func(_ *testing.T) {
 		(&FakeStream{}).Get()
 	})
 

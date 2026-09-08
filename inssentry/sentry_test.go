@@ -6,9 +6,9 @@ import (
 	"time"
 )
 
-
 func initFor(t *testing.T, production bool) {
 	t.Helper()
+
 	err := Init(Settings{
 		SentryDsn:        "",
 		AttachStacktrace: true,
@@ -32,6 +32,7 @@ func TestInit(t *testing.T) {
 		if err := Init(settings); err != nil {
 			t.Fatalf("Init() error = %v", err)
 		}
+
 		if cachedSettings != settings {
 			t.Errorf("cachedSettings = %+v, want %+v", cachedSettings, settings)
 		}
@@ -82,7 +83,8 @@ func TestFatal(t *testing.T) {
 
 		sentinel := errors.New("fatal in dev")
 		defer func() {
-			if r := recover(); r != sentinel {
+			r := recover()
+			if err, ok := r.(error); !ok || !errors.Is(err, sentinel) {
 				t.Errorf("recover() = %v, want the original error", r)
 			}
 		}()
@@ -95,7 +97,8 @@ func TestFatal(t *testing.T) {
 
 		sentinel := errors.New("fatal in prod")
 		defer func() {
-			if r := recover(); r != sentinel {
+			r := recover()
+			if err, ok := r.(error); !ok || !errors.Is(err, sentinel) {
 				t.Errorf("recover() = %v, want the original error", r)
 			}
 		}()

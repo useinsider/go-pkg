@@ -14,12 +14,16 @@ import (
 
 func newMethodEchoServer(t *testing.T) (*httptest.Server, *[]string) {
 	t.Helper()
+
 	var methods []string
+
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		methods = append(methods, r.Method)
+
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(ts.Close)
+
 	return ts, &methods
 }
 
@@ -77,7 +81,7 @@ func TestRequest_sendRequestEdgeCases(t *testing.T) {
 	})
 
 	t.Run("it_should_clone_custom_client_when_timeout_set", func(t *testing.T) {
-		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer ts.Close()
@@ -94,7 +98,8 @@ func TestRequest_sendRequestEdgeCases(t *testing.T) {
 
 	t.Run("it_should_truncate_oversized_error_bodies", func(t *testing.T) {
 		big := strings.Repeat("x", 5000)
-		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			_, _ = w.Write([]byte(big))
 		}))
@@ -127,8 +132,10 @@ func TestRequest_sendRequestEdgeCases(t *testing.T) {
 
 	t.Run("it_should_apply_host_header_to_request_host", func(t *testing.T) {
 		var receivedHost string
+
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			receivedHost = r.Host
+
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer ts.Close()

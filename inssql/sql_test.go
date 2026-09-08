@@ -20,12 +20,14 @@ func (d *captureDriver) Open(name string) (driver.Conn, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.lastDSN = name
+
 	return nil, errors.New("captureDriver: connections not supported")
 }
 
 func (d *captureDriver) dsn() string {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+
 	return d.lastDSN
 }
 
@@ -48,6 +50,7 @@ func TestNew(t *testing.T) {
 		if err == nil {
 			t.Fatal("New() error = nil, want unknown driver error")
 		}
+
 		if db != nil {
 			t.Errorf("New() db = %v, want nil", db)
 		}
@@ -79,6 +82,7 @@ func TestInit(t *testing.T) {
 		if err == nil {
 			t.Fatal("Init() error = nil, want unknown driver error")
 		}
+
 		if db != nil {
 			t.Errorf("Init() db = %v, want nil", db)
 		}
@@ -89,9 +93,11 @@ func TestInit(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Init() error = %v", err)
 		}
+
 		if db == nil {
 			t.Fatal("Init() db = nil, want client")
 		}
+
 		if GetClient() != db {
 			t.Error("GetClient() returned a different client than Init()")
 		}
@@ -99,10 +105,12 @@ func TestInit(t *testing.T) {
 
 	t.Run("it_should_return_cached_client_and_ignore_new_arguments", func(t *testing.T) {
 		first := GetClient()
+
 		db, err := Init("no-such-driver", "other", "other", "other", "other")
 		if err != nil {
 			t.Fatalf("Init() error = %v, want nil from cached client", err)
 		}
+
 		if db != first {
 			t.Error("Init() second call returned a different client, want the cached singleton")
 		}

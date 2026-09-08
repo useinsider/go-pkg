@@ -138,12 +138,14 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 
 		req, err := http.NewRequestWithContext(exec.Context(), httpMethod, re.Endpoint, bytes.NewReader(re.Body))
 		outerErr = err
+
 		if err != nil {
 			return nil, nil
 		}
 
 		req.Close = true
 		otel.GetTextMapPropagator().Inject(exec.Context(), propagation.HeaderCarrier(req.Header))
+
 		combinedHeaders := make(Headers, 0, len(r.headers)+len(re.Headers))
 		combinedHeaders = append(combinedHeaders, r.headers...)
 		combinedHeaders = append(combinedHeaders, re.Headers...) // RequestEntity headers will override Requester level headers.
@@ -160,38 +162,26 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 
 		response, doErr := client.Do(req)
 		outerErr = doErr
+
 		if doErr != nil {
 			if response != nil && response.Body != nil {
 				response.Body.Close()
 			}
+
 			if ctxErr := exec.Context().Err(); ctxErr != nil {
 				return nil, ctxErr
 			}
+
 			return nil, ErrRetryable
 		}
 
 		lastStatusCode = response.StatusCode
 
 		if response.StatusCode >= 100 && response.StatusCode < 200 ||
-			response.StatusCode == 429 ||
+			response.StatusCode == http.StatusTooManyRequests ||
 			response.StatusCode >= 500 && response.StatusCode <= 599 {
-			const maxErrBodySize = 4096
-			limitedReader := io.LimitReader(response.Body, maxErrBodySize+1)
-			bodyBytes, _ := io.ReadAll(limitedReader)
-			response.Body.Close()
-			truncated := len(bodyBytes) > maxErrBodySize
-			if truncated {
-				bodyBytes = bodyBytes[:maxErrBodySize]
-			}
-			if len(bodyBytes) > 0 {
-				msg := fmt.Sprintf("%s : %s", response.Status, string(bodyBytes))
-				if truncated {
-					msg += " [truncated]"
-				}
-				lastErrBody = msg
-			} else {
-				lastErrBody = response.Status
-			}
+			lastErrBody = errorBodySummary(response)
+
 			return response, ErrRetryable
 		}
 
@@ -202,37 +192,74 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 	if attempt > 0 {
 		resendCount = attempt - 1
 	}
+
 	span.SetAttributes(attribute.Int("http.resend_count", resendCount))
+
 	if lastStatusCode > 0 {
 		span.SetAttributes(attribute.Int("http.response.status_code", lastStatusCode))
 	}
 
 	if errors.Is(runnerErr, circuitbreaker.ErrOpen) {
 		span.SetStatus(codes.Error, "circuit breaker open")
+
 		if outerErr != nil {
 			return nil, fmt.Errorf("%s: %w", outerErr.Error(), ErrCircuitBreakerOpen)
 		}
+
 		if lastErrBody != "" {
 			return nil, fmt.Errorf("%s: %w", lastErrBody, ErrCircuitBreakerOpen)
 		}
+
 		return nil, ErrCircuitBreakerOpen
 	}
 
 	if outerErr != nil {
 		span.RecordError(outerErr)
 		span.SetStatus(codes.Error, outerErr.Error())
+
 		return nil, outerErr
 	}
 
 	if runnerErr != nil {
 		span.SetStatus(codes.Error, "retries exhausted")
+
 		if lastErrBody != "" {
 			return nil, fmt.Errorf("%s: %w", lastErrBody, ErrRetriesExhausted)
 		}
+
 		return nil, ErrRetriesExhausted
 	}
 
 	return res, nil
+}
+
+// errorBodySummary reads at most maxErrBodySize bytes of a retryable
+// response's body, closes the body, and returns "<status> : <body>" (with a
+// "[truncated]" marker when the body was cut), or just the status when the
+// body is empty.
+func errorBodySummary(res *http.Response) string {
+	const maxErrBodySize = 4096
+
+	limitedReader := io.LimitReader(res.Body, maxErrBodySize+1)
+	bodyBytes, _ := io.ReadAll(limitedReader)
+
+	res.Body.Close()
+
+	truncated := len(bodyBytes) > maxErrBodySize
+	if truncated {
+		bodyBytes = bodyBytes[:maxErrBodySize]
+	}
+
+	if len(bodyBytes) == 0 {
+		return res.Status
+	}
+
+	msg := fmt.Sprintf("%s : %s", res.Status, string(bodyBytes))
+	if truncated {
+		msg += " [truncated]"
+	}
+
+	return msg
 }
 
 func (r RequestEntity) applyHeadersToRequest(request *http.Request) {
@@ -278,6 +305,7 @@ func (r *Request) WithRetry(config RetryConfig) *Request {
 		if jitter > 1 {
 			jitter = 1
 		}
+
 		builder = builder.WithJitterFactor(jitter)
 	}
 
@@ -301,6 +329,7 @@ func (r *Request) WithCircuitbreaker(config CircuitBreakerConfig) *Request {
 	if successThreshold < 0 {
 		successThreshold = 0
 	}
+
 	builder := circuitbreaker.Builder[*http.Response]().
 		WithSuccessThreshold(uint(successThreshold)).
 		WithDelay(config.WaitDurationInOpenState).
@@ -309,34 +338,51 @@ func (r *Request) WithCircuitbreaker(config CircuitBreakerConfig) *Request {
 		})
 
 	if config.FailureRateThreshold > 0 {
-		rate := config.FailureRateThreshold
-		if rate > 100 {
-			rate = 100
-		}
-		if config.FailureExecutionThreshold == 0 {
-			config.FailureExecutionThreshold = 20
-		}
-		if config.FailureThresholdingPeriod == 0 {
-			config.FailureThresholdingPeriod = 10 * time.Second
-		}
-		builder = builder.WithFailureRateThreshold(
-			rate,
-			config.FailureExecutionThreshold,
-			config.FailureThresholdingPeriod,
-		)
+		rate, executions, period := failureRateSettings(config)
+		builder = builder.WithFailureRateThreshold(rate, executions, period)
 	} else {
-		if config.MinimumRequestToOpen == 0 {
-			config.MinimumRequestToOpen = 3
-		}
-		if config.MinimumRequestToOpen < 0 {
-			config.MinimumRequestToOpen = 0
-		}
-		builder = builder.WithFailureThreshold(uint(config.MinimumRequestToOpen))
+		builder = builder.WithFailureThreshold(consecutiveFailureThreshold(config.MinimumRequestToOpen))
 	}
 
 	r.policies = append(r.policies, builder.Build())
 
 	return r
+}
+
+// failureRateSettings applies the rate-based breaker defaults: the rate is
+// capped at 100%, and a zero execution threshold or thresholding period fall
+// back to 20 samples over 10 seconds.
+func failureRateSettings(config CircuitBreakerConfig) (rate, executions uint, period time.Duration) {
+	rate = config.FailureRateThreshold
+	if rate > 100 {
+		rate = 100
+	}
+
+	executions = config.FailureExecutionThreshold
+	if executions == 0 {
+		executions = 20
+	}
+
+	period = config.FailureThresholdingPeriod
+	if period == 0 {
+		period = 10 * time.Second
+	}
+
+	return rate, executions, period
+}
+
+// consecutiveFailureThreshold applies the count-based breaker defaults: zero
+// means three consecutive failures, and negative values clamp to zero.
+func consecutiveFailureThreshold(minimumRequestToOpen int) uint {
+	if minimumRequestToOpen == 0 {
+		return 3
+	}
+
+	if minimumRequestToOpen < 0 {
+		return 0
+	}
+
+	return uint(minimumRequestToOpen)
 }
 
 func (r *Request) WithHTTPClient(client *http.Client) *Request {
