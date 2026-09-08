@@ -6,6 +6,10 @@ permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: unit-tests-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   unit-tests:
     runs-on: self-hosted

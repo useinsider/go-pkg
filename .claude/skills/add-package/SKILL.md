@@ -17,7 +17,7 @@ Create a new package: $ARGUMENTS
    cd ins<name>
    go mod init github.com/useinsider/go-pkg/ins<name>
    ```
-   - Set Go version to match other recent packages (check `insrequester/v2/go.mod` for latest)
+   - Set Go version to match other recent packages (`insrequester/v3/go.mod` currently has the highest floor; the `/v2` module lives in `insrequester/go.mod`)
 
 3. **Create main package file** (`ins<name>/<name>.go`)
    - Define the primary `Interface` type
@@ -63,10 +63,18 @@ Create a new package: $ARGUMENTS
    - Add entry to `CLAUDE.md` repository structure
    - Update `scripts/check-deps.sh` if needed
 
-8. **Verify**
+8. **CI needs no edit**
+   - `.github/workflows/lint.yml` and `scripts/coverage.sh` (the `unit-tests`
+     check) both discover modules with `find . -name go.mod`, so the new
+     module is linted and tested automatically. Do not add a matrix entry
+     or a new job — the `golangci-lint` and `unit-tests` check names are
+     branch-protection contexts and must stay as they are.
+
+9. **Verify**
    ```bash
    cd ins<name>
    go mod tidy
-   go test ./...
+   go test -race ./...
    go vet ./...
+   golangci-lint run --config ../.golangci.yaml ./...   # must print "0 issues."
    ```

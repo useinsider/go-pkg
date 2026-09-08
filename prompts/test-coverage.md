@@ -47,3 +47,12 @@ the default.
 
 **Backward-compatibility warning**: flag any change to an exported signature,
 struct field, interface, or error sentinel — it can break downstream services.
+
+## Test Types (Service Maturity declaration)
+
+- **Unit Tests**: REQUIRED — per-module `go test ./...`, aggregated by
+  `scripts/coverage.sh` and reported by the `unit-tests` check.
+- ❌ **Integration Tests**: Not applicable — this is a library with no
+  deployable artifact; DB and AWS dependencies are covered with go-sqlmock and
+  gomock, never a live backend.
+- ❌ **Visual Tests**: Not applicable — no UI.

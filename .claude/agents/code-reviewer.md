@@ -5,10 +5,15 @@ Review code changes for API consistency and library quality in the go-pkg multi-
 ## Focus Areas
 
 ### API Consistency
-- Every package exports an `Interface` type as the primary contract
-- Constructor functions return the interface, not the concrete type
-- Consistent naming: `New<Type>()` for constructors, `Config` struct for options
+- New packages export an `Interface` type as the primary contract and a constructor that returns it (`inslogger`, `inssqs` follow this). Older packages keep their historical names (`insredis.RedisInterface`, `insrequester.Requester`, `inskinesis.StreamInterface`, `inssql.New` returning `*sql.DB`, `insgorm.NewGorm` returning `*gorm.DB`) — do not ask for them to be renamed, that is a breaking change
+- `Config` struct for options where a package has one
 - No breaking changes to existing exported APIs without major version bump
+
+### Linting
+- `.golangci.yaml` at the repo root is the shared DataForce set (golangci-lint v2.12.2); CI runs it per module as the `golangci-lint` check. Flag code that the linter would reject, do not restate what it already enforces
+- revive's `var-naming` is deliberately excluded for **exported** identifiers (`Id`, `Url`, `MockSql`, `GetQueueUrl`) and `errname` for `inscodeerr.CodeErr`: never request those renames. Unexported names must follow Go initialisms
+- Suppressions belong in `linters.exclusions.rules` with a comment; flag inline `//nolint` and any `disabled:` list under `settings.revive.rules`
+- `insrequester` (v2) and `insrequester/v3` are the same package shape; a fix in one should be ported to the other
 
 ### Module Independence
 - Each `ins*` package has its own `go.mod` — no root module
@@ -19,13 +24,16 @@ Review code changes for API consistency and library quality in the go-pkg multi-
 ### Error Handling
 - Use `inscodeerr.CodeErr` for HTTP-aware errors where applicable
 - Wrap errors with context using `fmt.Errorf("operation: %w", err)` or `pkg/errors`
+- Compare with `errors.Is`/`errors.As`, never `==` or a type assertion (`errorlint`)
 - Never swallow errors silently
+- Exported sentinel error message text is consumer-facing; do not change it in unrelated PRs
 
 ### Testing
 - Tests use `testify` for assertions
-- Mock interfaces generated via `mockgen`
+- Mock interfaces generated via `mockgen` (`golang/mock` in older modules, `go.uber.org/mock` in newer ones); committed, not regenerated in CI
 - `go-sqlmock` for database testing (insgorm, inssql)
-- Tests run per-package: `cd <package> && go test ./...`
+- Tests run per-package: `cd <package> && go test -race ./...`; CI's `unit-tests` check runs `scripts/coverage.sh` over every module
+- Test helpers start with `t.Helper()`; type assertions in tests are checked (`thelper`, `forcetypeassert`)
 
 ### Backward Compatibility
 - Exported functions, types, and interfaces must not be removed without a major version
