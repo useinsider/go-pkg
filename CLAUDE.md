@@ -49,13 +49,31 @@ The config is the v2 schema; do not add a v1-format file.
 
 | Check | Workflow | Trigger | Required (once PA-40353 Task 6 lands) |
 |---|---|---|---|
-| `golangci-lint` | `.github/workflows/lint.yml` | push (develop, master) + PR | yes |
-| `unit-tests` | `.github/workflows/unit-tests.yml` | push | yes |
+| `golangci-lint` | `.github/workflows/lint.yml` | push (develop, master) + PR | BLOCKED — see below |
+| `unit-tests` | `.github/workflows/unit-tests.yml` | push | BLOCKED — see below |
 | `AI Code Review` | `.github/workflows/ai-code-review.yml` | PR | no |
 | `AI Test Coverage` | `.github/workflows/ai-test-coverage.yml` | PR | no |
 | `AI Security Review` | `.github/workflows/ai-security-review.yml` | PR + issue comment | no |
 | `Security AllInOne` | `.github/workflows/security_allinone.yml` | `feature/*` push + PR | no |
 | `Block MySQL 5.x Usage` | `.github/workflows/mysql-version-check.yml` | PR to `develop` | no |
+
+**Do not turn on branch protection for `golangci-lint` or `unit-tests` yet.**
+No self-hosted workflow has ever completed in this repository: every `Lint`,
+`Unit Tests` and `Security AllInOne` run in its history queued and was
+cancelled. The only successful runs go-pkg has ever had are GitHub-hosted
+(Dependabot's graph update, Copilot review).
+
+This is not a workflow-file problem. `security_allinone.yml` has always used
+the `group: default` / `labels: self-hosted` block, and go-pkg-private uses
+that identical block and schedules instantly — go-pkg is simply not granted
+access to the runner group, which is an org-level setting no workflow edit
+can reach. All four self-hosted workflows here now use the same block so
+nothing else has to change once access is granted.
+
+Requiring these two checks before then makes every PR in go-pkg unmergeable:
+the checks would never report at all, rather than fail. The prerequisite for
+PA-40353 Task 6 in this repo is the runner-group grant, then one green run of
+each on `develop`.
 
 There is no root module. Both gates run per module:
 

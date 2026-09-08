@@ -12,6 +12,10 @@ jobs:
     runs-on:
       group: default
       labels: self-hosted
+    # Capped like lint.yml and unit-tests.yml: an uncapped job on a wedged
+    # runner holds a self-hosted slot for the 6-hour default and starves the
+    # other three workflows, which share this pool.
+    timeout-minutes: 10
     steps:
       - name: Create GitHub App token
         id: github-app-token
