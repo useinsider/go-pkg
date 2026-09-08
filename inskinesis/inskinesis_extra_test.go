@@ -132,7 +132,7 @@ func TestStream_PutAndFlush(t *testing.T) {
 		s.FlushAndStopStreaming()
 
 		assert.Equal(t, 2, s.totalCount)
-		assert.Equal(t, 0, s.failedCount)
+		assert.Equal(t, int64(0), s.failedCount.Load())
 	})
 
 	t.Run("it_should_flush_mid_stream_when_buffer_size_exceeded", func(t *testing.T) {
@@ -203,7 +203,7 @@ func TestStream_PutAndFlush(t *testing.T) {
 		case <-time.After(2 * time.Second):
 			t.Fatal("no error received from Error() channel")
 		}
-		assert.Equal(t, 1, s.failedCount)
+		assert.Equal(t, int64(1), s.failedCount.Load())
 	})
 }
 

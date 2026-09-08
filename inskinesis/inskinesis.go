@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -52,14 +53,15 @@ type stream struct {
 	retryCount    int           // Maximum number of retries for failed record submissions.
 	retryWaitTime time.Duration // Time to wait between retries for failed record submissions.
 
-	// No mutex: the unused mu sync.Mutex that sat here was removed for the
-	// `unused` linter, not because access is synchronised. failedCount is
-	// written by every sendSingleBatch goroutine and read by
-	// FlushAndStopStreaming; those writes stay ordered only because maxGroup
-	// defaults to 1, so concurrentLimiter admits one goroutine at a time.
-	// MaxGroup > 1 races on it. logBuffer is written by startStreaming and by
-	// the flush goroutine in startBatchStreaming, which the stopBatchChannel
-	// send and wgBatchChan.Wait handshake keep apart.
+	// The unused mu sync.Mutex that sat here was removed for the `unused`
+	// linter; failedCount is an atomic instead, because it is written by every
+	// sendSingleBatch goroutine and read by FlushAndStopStreaming. Ordering
+	// used to hold only because maxGroup defaults to 1, so concurrentLimiter
+	// admitted one goroutine at a time — but README.md documents MaxGroup: 10
+	// for concurrent sends, so the first caller who follows it would have raced.
+	// logBuffer is written by startStreaming and by the flush goroutine in
+	// startBatchStreaming, which the stopBatchChannel send and wgBatchChan.Wait
+	// handshake keep apart.
 	wgLogChan        *sync.WaitGroup    // WaitGroup to manage goroutines.
 	wgBatchChan      *sync.WaitGroup    // WaitGroup to manage goroutines.
 	logChannel       chan interface{}   // Channel for receiving individual log records.
@@ -69,8 +71,8 @@ type stream struct {
 	stopBatchChannel chan bool          // Channel to signal the termination of batch streaming.
 	logBuffer        []interface{}      // Buffer for accumulating log records before batching.
 
-	failedCount int // Counter for the number of failed record submissions.
-	totalCount  int // Counter for the total number of records sent to the stream.
+	failedCount atomic.Int64 // Counter for the number of failed record submissions; written from every sendSingleBatch goroutine.
+	totalCount  int          // Counter for the total number of records sent to the stream.
 
 	verbose bool // Verbose mode
 }
@@ -267,7 +269,7 @@ func (s *stream) sendSingleBatch(batch []interface{}, concurrentLimiter chan str
 		}()
 
 		failedCount, err := s.PutRecords(batch)
-		s.failedCount += failedCount
+		s.failedCount.Add(int64(failedCount))
 
 		if err != nil {
 			s.printf("Error sending records to Kinesis stream %s: %v\n", s.name, err)
@@ -291,7 +293,7 @@ func (s *stream) start() {
 func (s *stream) FlushAndStopStreaming() {
 	s.stopAndWaitLogStreaming()
 
-	s.printf("%d/%d records sent to Kinesis stream %s\n", s.totalCount-s.failedCount, s.totalCount, s.name)
+	s.printf("%d/%d records sent to Kinesis stream %s\n", s.totalCount-int(s.failedCount.Load()), s.totalCount, s.name)
 }
 
 // PutRecords sends records to the Kinesis stream.

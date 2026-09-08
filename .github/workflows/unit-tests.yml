@@ -8,7 +8,12 @@ permissions:
 
 concurrency:
   group: unit-tests-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # Supersede in-flight runs on every branch EXCEPT the default ones, so a
+  # default-branch run always finishes and leaves a readable check on the head
+  # commit. Gated on the ref rather than github.event_name: this workflow only
+  # triggers on push, so an event_name == 'pull_request' test is always false
+  # and the guard would do nothing at all.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/develop' && github.ref != 'refs/heads/master' }}
 
 jobs:
   unit-tests:
