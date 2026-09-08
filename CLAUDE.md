@@ -53,6 +53,9 @@ The config is the v2 schema; do not add a v1-format file.
 | `unit-tests` | `.github/workflows/unit-tests.yml` | push | yes |
 | `AI Code Review` | `.github/workflows/ai-code-review.yml` | PR | no |
 | `AI Test Coverage` | `.github/workflows/ai-test-coverage.yml` | PR | no |
+| `AI Security Review` | `.github/workflows/ai-security-review.yml` | PR + issue comment | no |
+| `Security AllInOne` | `.github/workflows/security_allinone.yml` | `feature/*` push + PR | no |
+| `Block MySQL 5.x Usage` | `.github/workflows/mysql-version-check.yml` | PR to `develop` | no |
 
 There is no root module. Both gates run per module:
 

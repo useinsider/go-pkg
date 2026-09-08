@@ -52,6 +52,14 @@ type stream struct {
 	retryCount    int           // Maximum number of retries for failed record submissions.
 	retryWaitTime time.Duration // Time to wait between retries for failed record submissions.
 
+	// No mutex: the unused mu sync.Mutex that sat here was removed for the
+	// `unused` linter, not because access is synchronised. failedCount is
+	// written by every sendSingleBatch goroutine and read by
+	// FlushAndStopStreaming; those writes stay ordered only because maxGroup
+	// defaults to 1, so concurrentLimiter admits one goroutine at a time.
+	// MaxGroup > 1 races on it. logBuffer is written by startStreaming and by
+	// the flush goroutine in startBatchStreaming, which the stopBatchChannel
+	// send and wgBatchChan.Wait handshake keep apart.
 	wgLogChan        *sync.WaitGroup    // WaitGroup to manage goroutines.
 	wgBatchChan      *sync.WaitGroup    // WaitGroup to manage goroutines.
 	logChannel       chan interface{}   // Channel for receiving individual log records.
