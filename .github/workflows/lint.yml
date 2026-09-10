@@ -1,46 +1,68 @@
 name: Lint
 
 on:
-  pull_request:
+  # Scoped to the default branches on purpose. An unfiltered push trigger fires
+  # a SECOND run for every PR commit, in a different concurrency group from the
+  # pull_request run, so neither cancels the other; on a self-hosted pool the
+  # duplicate queues and is reclaimed, leaving a red cancelled check on the PR.
+  # The dashboard only needs a run on the default-branch head, which this gives.
+  push:
     branches:
       - develop
+      - master
+  pull_request:
 
 permissions:
   contents: read
-  pull-requests: read
+
+concurrency:
+  group: lint-${{ github.ref }}
+  # Only supersede in-flight PR runs. A cancelled default-branch run leaves no
+  # usable check on the head commit, and the Service Maturity sweep reads that
+  # commit to decide the Lint badge — the previous workflow's runs showed up
+  # as cancelled/skipped and the badge never went green.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  discover-modules:
-    name: Discover modules
-    runs-on: self-hosted
-    outputs:
-      modules: ${{ steps.discover.outputs.modules }}
-    steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
-      - name: Discover Go modules
-        id: discover
-        run: echo "modules=$(find . -name go.mod -not -path './.git/*' | xargs -n1 dirname | sort | jq -R -s -c 'split("\n")[:-1]')" >> "$GITHUB_OUTPUT"
-
-  golangci:
+  golangci-lint:
+    # One job, not the previous discover-modules + matrix pair: a matrix
+    # reports as "golangci-lint (./insdash)" etc, so the branch-protection
+    # context list would churn on every module added. The name also carries the
+    # "golangci"/"lint" token the Service Maturity tokenizer matches.
     name: golangci-lint
-    needs: discover-modules
-    runs-on: self-hosted
-    strategy:
-      fail-fast: false
-      matrix:
-        module: ${{ fromJson(needs.discover-modules.outputs.modules) }}
+    # Matches go-pkg-private's lint.yml and this repo's security_allinone.yml.
+    # NOTE: this alone does NOT make the job run. No self-hosted workflow has
+    # ever completed in go-pkg — every Lint, Unit Tests and Security AllInOne
+    # run in the repo's history queued and was cancelled, including
+    # security_allinone.yml, which has always used this exact block. The label
+    # form was never the cause: the go-pkg repository is not granted access to
+    # the runner group, which is an org-level setting no workflow edit can
+    # reach. go-pkg-private uses the identical block and schedules instantly.
+    # Until an org admin adds go-pkg to the runner group, golangci-lint and
+    # unit-tests cannot go green and must not be made required (PA-40353).
+    runs-on:
+      group: default
+      labels: self-hosted
+    timeout-minutes: 15
     steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
-      - name: Install Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
         with:
-          go-version: 1.26.0
-          cache-dependency-path: ${{ matrix.module }}/go.sum
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: v2.12.2
-          working-directory: ${{ matrix.module }}
-          only-new-issues: true
+          go-version: "1.26"
+
+      - name: Install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/v2.12.2/install.sh \
+            | sh -s -- -b "$(go env GOPATH)/bin" v2.12.2
+
+      - name: Lint every module
+        run: |
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          status=0
+          for mod in $(find . -name go.mod -not -path './.git/*' | xargs -n1 dirname | sort); do
+            echo "::group::$mod"
+            (cd "$mod" && golangci-lint run --config "$GITHUB_WORKSPACE/.golangci.yaml" ./...) || status=1
+            echo "::endgroup::"
+          done
+          exit $status

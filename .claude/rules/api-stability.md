@@ -38,9 +38,29 @@ moving the module path to `/<pkg>/vN+1/`:
 - Major (`vX+1.0.0`): anything breaking, and the module path gains `/vN`.
   Example: `insrequester/v2`. Callers migrate by updating imports.
 
+## Exported names and the linter
+
+`.golangci.yaml` enables revive, whose `var-naming` rule wants `Id` -> `ID`,
+`Url` -> `URL`, `Sql` -> `SQL`. For **exported** identifiers that rename is
+exactly the breaking change described above, so the config excludes
+`var-naming` for exported struct fields, types, funcs, methods, consts and
+vars (see the `linters.exclusions.rules` entry and its comment). Known
+survivors, kept on purpose: `inssqs.SQSMessageEntry.Id`,
+`MessageDeduplicationId`, `MessageGroupId`, `Config.EndpointUrl`,
+`sqs.API.GetQueueUrl`, `inssql.MockSql`, and `inscodeerr.CodeErr` (which
+`errname` would call `CodeError`, excluded the same way). Unexported names
+are linted normally and were renamed (`getQueueUrl` -> `getQueueURL`, etc.).
+
+The exclusion lives in `linters.exclusions.rules`, never as a `disabled:`
+list under `settings.revive.rules` — in golangci-lint v2 that list replaces
+revive's entire rule set and switches the linter off silently.
+
 ## Before opening a PR
 
-- Run `go vet ./...` and `go test ./...` inside the package directory.
+- Run `golangci-lint run --config <repo-root>/.golangci.yaml ./...`,
+  `go vet ./...` and `go test -race ./...` inside the package directory.
+  CI runs the same lint config as the `golangci-lint` check and the tests
+  as the `unit-tests` check.
 - If you touched an exported symbol, run `gorelease -base=<last-tag>` (or
   eyeball the diff) and confirm the planned version bump is correct.
 - If a dependent `ins*` module needs updating too, note the release order

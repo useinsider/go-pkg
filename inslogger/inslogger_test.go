@@ -12,6 +12,7 @@ import (
 func newObservedLogger() (*AppLogger, *observer.ObservedLogs) {
 	core, logs := observer.New(zapcore.DebugLevel)
 	logger := zap.New(core, zap.WithFatalHook(zapcore.WriteThenPanic))
+
 	return &AppLogger{Logger: logger, Sugar: logger.Sugar(), Level: Debug}, logs
 }
 
@@ -55,12 +56,15 @@ func TestNewLogger(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			l := NewLogger(tt.level)
 			al, ok := l.(*AppLogger)
+
 			if !ok {
 				t.Fatalf("NewLogger() returned %T, want *AppLogger", l)
 			}
+
 			if al.Logger == nil || al.Sugar == nil {
 				t.Error("NewLogger() left Logger/Sugar nil")
 			}
+
 			if al.Level != tt.level {
 				t.Errorf("Level = %q, want %q", al.Level, tt.level)
 			}
@@ -74,6 +78,7 @@ func TestNewNopLogger(t *testing.T) {
 		if l == nil {
 			t.Fatal("NewNopLogger() = nil")
 		}
+
 		l.Log("x")
 		l.Logf("%s", "x")
 		l.Warn("x")
@@ -170,9 +175,11 @@ func TestAppLogger_LoggingMethods(t *testing.T) {
 			if len(entries) != tt.wantCount {
 				t.Fatalf("logged %d entries, want %d", len(entries), tt.wantCount)
 			}
+
 			if entries[0].Level != tt.wantLevel {
 				t.Errorf("level = %v, want %v", entries[0].Level, tt.wantLevel)
 			}
+
 			if entries[0].Message != tt.wantMsg {
 				t.Errorf("message = %q, want %q", entries[0].Message, tt.wantMsg)
 			}
@@ -188,6 +195,7 @@ func TestAppLogger_Fatal(t *testing.T) {
 			if recover() == nil {
 				t.Fatal("Fatal() did not go through the fatal hook")
 			}
+
 			entries := logs.All()
 			if len(entries) != 1 || entries[0].Level != zapcore.FatalLevel {
 				t.Errorf("entries = %+v, want one fatal entry", entries)
@@ -204,6 +212,7 @@ func TestAppLogger_Fatal(t *testing.T) {
 			if recover() == nil {
 				t.Fatal("Fatalf() did not go through the fatal hook")
 			}
+
 			entries := logs.All()
 			if len(entries) != 1 || entries[0].Level != zapcore.FatalLevel {
 				t.Errorf("entries = %+v, want one fatal entry", entries)
@@ -216,7 +225,10 @@ func TestAppLogger_Fatal(t *testing.T) {
 
 func TestAppLogger_SetLevel(t *testing.T) {
 	t.Run("it_should_not_change_the_active_level", func(t *testing.T) {
-		al := NewLogger(Info).(*AppLogger)
+		al, ok := NewLogger(Info).(*AppLogger)
+		if !ok {
+			t.Fatal("NewLogger did not return *AppLogger")
+		}
 
 		if al.Logger.Core().Enabled(zapcore.DebugLevel) {
 			t.Fatal("precondition failed: Info logger already accepts debug")

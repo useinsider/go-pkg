@@ -3,6 +3,7 @@ package inscodeerr_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -17,9 +18,11 @@ func TestNewCodeErr(t *testing.T) {
 		if c.Code != http.StatusBadRequest {
 			t.Errorf("Code = %d, want %d", c.Code, http.StatusBadRequest)
 		}
-		if c.Err != wrapped {
+
+		if !errors.Is(c.Err, wrapped) {
 			t.Errorf("Err = %v, want %v", c.Err, wrapped)
 		}
+
 		if c.Message != "bad input" {
 			t.Errorf("Message = %q, want %q", c.Message, "bad input")
 		}
@@ -87,6 +90,7 @@ func TestCodeErr_MarshalJSON(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Marshal() error = %v", err)
 			}
+
 			if string(got) != tt.want {
 				t.Errorf("Marshal() = %s, want %s", got, tt.want)
 			}
@@ -106,10 +110,12 @@ func TestCodeErr_StatusCode(t *testing.T) {
 func TestCodeErr_Headers(t *testing.T) {
 	t.Run("it_should_return_empty_non_nil_headers", func(t *testing.T) {
 		c := inscodeerr.CodeErr{}
+
 		h := c.Headers()
 		if h == nil {
 			t.Fatal("Headers() = nil, want empty http.Header")
 		}
+
 		if len(h) != 0 {
 			t.Errorf("Headers() has %d entries, want 0", len(h))
 		}
@@ -127,6 +133,13 @@ func TestGetStatusCode(t *testing.T) {
 	t.Run("it_should_fall_back_to_500_for_plain_error", func(t *testing.T) {
 		if got := inscodeerr.GetStatusCode(errors.New("plain")); got != http.StatusInternalServerError {
 			t.Errorf("GetStatusCode() = %d, want %d", got, http.StatusInternalServerError)
+		}
+	})
+
+	t.Run("it_should_return_code_for_wrapped_CodeErr", func(t *testing.T) {
+		err := fmt.Errorf("ctx: %w", inscodeerr.NewCodeErr(http.StatusConflict, nil, ""))
+		if got := inscodeerr.GetStatusCode(err); got != http.StatusConflict {
+			t.Errorf("GetStatusCode(wrapped) = %d, want %d", got, http.StatusConflict)
 		}
 	})
 

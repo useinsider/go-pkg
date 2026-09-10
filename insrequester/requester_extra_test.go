@@ -2,24 +2,31 @@ package insrequester
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/slok/goresilience"
+	goresilienceErrors "github.com/slok/goresilience/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func newMethodEchoServer(t *testing.T) (*httptest.Server, *[]string) {
 	t.Helper()
+
 	var methods []string
+
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		methods = append(methods, r.Method)
+
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(ts.Close)
+
 	return ts, &methods
 }
 
@@ -77,7 +84,7 @@ func TestRequest_sendRequestEdgeCases(t *testing.T) {
 	})
 
 	t.Run("it_should_clone_custom_client_when_timeout_set", func(t *testing.T) {
-		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer ts.Close()
@@ -94,7 +101,8 @@ func TestRequest_sendRequestEdgeCases(t *testing.T) {
 
 	t.Run("it_should_truncate_oversized_error_bodies", func(t *testing.T) {
 		big := strings.Repeat("x", 5000)
-		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			_, _ = w.Write([]byte(big))
 		}))
@@ -127,8 +135,10 @@ func TestRequest_sendRequestEdgeCases(t *testing.T) {
 
 	t.Run("it_should_apply_host_header_to_request_host", func(t *testing.T) {
 		var receivedHost string
+
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			receivedHost = r.Host
+
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer ts.Close()
@@ -164,5 +174,39 @@ func TestRequest_ConfigDefaults(t *testing.T) {
 	t.Run("it_should_keep_explicit_timeout", func(t *testing.T) {
 		r := NewRequester().WithTimeout(5 * time.Second)
 		assert.Equal(t, 5*time.Second, r.timeout)
+	})
+}
+
+func TestRequest_TimeoutBranch(t *testing.T) {
+	t.Run("it_should_return_err_timeout_when_the_runner_reports_a_timeout", func(t *testing.T) {
+		// WithTimeout drives the http.Client deadline, which surfaces as a
+		// transport error -- not as this branch. The branch translates
+		// goresilience's OWN ErrTimeout, which only the runner can raise, so the
+		// runner is stubbed directly. Wrapped, to prove the check uses errors.Is
+		// rather than equality.
+		r := NewRequester().Load()
+		r.runner = goresilience.RunnerFunc(func(_ context.Context, _ goresilience.Func) error {
+			return fmt.Errorf("runner gave up: %w", goresilienceErrors.ErrTimeout)
+		})
+
+		_, err := r.Get(context.Background(), RequestEntity{Endpoint: "http://127.0.0.1:1"})
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrTimeout)
+	})
+
+	t.Run("it_should_return_err_circuit_breaker_open_when_the_runner_reports_a_wrapped_open_circuit", func(t *testing.T) {
+		// The sibling of the timeout case. The three existing circuit tests pass
+		// the bare sentinel, so they also pass under the previous == comparison;
+		// only a WRAPPED error demonstrates that the errors.Is widening works.
+		r := NewRequester().Load()
+		r.runner = goresilience.RunnerFunc(func(_ context.Context, _ goresilience.Func) error {
+			return fmt.Errorf("breaker: %w", goresilienceErrors.ErrCircuitOpen)
+		})
+
+		_, err := r.Get(context.Background(), RequestEntity{Endpoint: "http://127.0.0.1:1"})
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrCircuitBreakerOpen)
 	})
 }

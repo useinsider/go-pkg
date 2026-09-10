@@ -22,9 +22,11 @@ type stubSSM struct {
 func (s *stubSSM) GetParameter(input *ssm.GetParameterInput) (*ssm.GetParameterOutput, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if s.calls == nil {
 		s.calls = map[string]int{}
 	}
+
 	s.calls[aws.StringValue(input.Name)]++
 
 	if s.err != nil {
@@ -50,13 +52,16 @@ func (s *stubSSM) PutParameter(_ *ssm.PutParameterInput) (*ssm.PutParameterOutpu
 func (s *stubSSM) callCount(key string) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	return s.calls[key]
 }
 
 func TestInit(t *testing.T) {
 	t.Run("it_should_skip_initialization_when_env_is_local", func(t *testing.T) {
 		prev := ParameterStore
+
 		t.Cleanup(func() { ParameterStore = prev })
+
 		ParameterStore = nil
 
 		t.Setenv("ENV", "LOCAL")
@@ -69,7 +74,9 @@ func TestInit(t *testing.T) {
 
 	t.Run("it_should_initialize_parameter_store_otherwise", func(t *testing.T) {
 		prev := ParameterStore
+
 		t.Cleanup(func() { ParameterStore = prev })
+
 		ParameterStore = nil
 
 		t.Setenv("ENV", "TEST")
@@ -84,6 +91,7 @@ func TestInit(t *testing.T) {
 func TestGet(t *testing.T) {
 	t.Run("it_should_return_value_from_parameter_store", func(t *testing.T) {
 		prev := ParameterStore
+
 		t.Cleanup(func() { ParameterStore = prev })
 
 		stub := &stubSSM{values: map[string]string{"insssm-test-key-1": "value-1"}}
@@ -96,6 +104,7 @@ func TestGet(t *testing.T) {
 
 	t.Run("it_should_serve_repeated_reads_from_cache", func(t *testing.T) {
 		prev := ParameterStore
+
 		t.Cleanup(func() { ParameterStore = prev })
 
 		stub := &stubSSM{values: map[string]string{"insssm-test-key-2": "value-2"}}
@@ -114,6 +123,7 @@ func TestGet(t *testing.T) {
 
 	t.Run("it_should_panic_when_parameter_store_fails", func(t *testing.T) {
 		prev := ParameterStore
+
 		t.Cleanup(func() { ParameterStore = prev })
 
 		stub := &stubSSM{err: errors.New("aws is down")}
@@ -124,6 +134,7 @@ func TestGet(t *testing.T) {
 			if r == nil {
 				t.Fatal("Get() did not panic on SSM error")
 			}
+
 			if msg := fmt.Sprint(r); !strings.Contains(msg, "aws is down") {
 				t.Errorf("panic message %q does not mention the SSM error", msg)
 			}

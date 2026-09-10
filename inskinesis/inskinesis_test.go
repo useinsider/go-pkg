@@ -27,7 +27,6 @@ func Test_wrapWithPutRecordsRequestEntry(t *testing.T) {
 
 		assert.Equal(t, expected[0].Data, actual[0].Data)
 		assert.Equal(t, expected[1].Data, actual[1].Data)
-
 	})
 }
 
@@ -172,10 +171,11 @@ func fakePartitioner(_ interface{}) string {
 }
 
 func Test_putRecords(t *testing.T) {
+	mockClient := NewMockKinesisInterface(gomock.NewController(t))
 	s := stream{
 		name:          "test-stream",
 		partitioner:   PartitionerPointer(fakePartitioner),
-		kinesisClient: NewMockKinesisInterface(gomock.NewController(t)),
+		kinesisClient: mockClient,
 	}
 
 	t.Run("it_should_retry", func(t *testing.T) {
@@ -202,10 +202,11 @@ func Test_putRecords(t *testing.T) {
 			},
 		}
 
-		s.kinesisClient.(*MockKinesisInterface).EXPECT().PutRecords(&kinesis.PutRecordsInput{
+		mockClient.EXPECT().PutRecords(&kinesis.PutRecordsInput{
 			Records:    records,
 			StreamName: aws.String(s.name),
 		}).Times(4).Return(&resp, nil)
+
 		failedCount, _ := s.putRecords(records, 3)
 
 		assert.Equal(t, 2, failedCount)
@@ -235,10 +236,11 @@ func Test_putRecords(t *testing.T) {
 			},
 		}
 
-		s.kinesisClient.(*MockKinesisInterface).EXPECT().PutRecords(&kinesis.PutRecordsInput{
+		mockClient.EXPECT().PutRecords(&kinesis.PutRecordsInput{
 			Records:    records,
 			StreamName: aws.String(s.name),
 		}).Times(1).Return(&resp, nil)
+
 		failedCount, _ := s.putRecords(records, 3)
 
 		assert.Equal(t, 0, failedCount)

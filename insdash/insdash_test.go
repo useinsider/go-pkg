@@ -42,6 +42,7 @@ func createString(byteSize int) string {
 	for i := 0; i < byteSize; i++ {
 		str += "a"
 	}
+
 	return str
 }
 
@@ -103,6 +104,6 @@ func TestMapToValueSlice(t *testing.T) {
 	t.Run("should_return_slice_with_multiple_values_when_not_empty", func(t *testing.T) {
 		s := MapToValueSlice(map[string]string{"test": "test", "test2": "test2"})
 		assert.Equal(t, 2, len(s), "slice length should be equal to 2")
-		assert.Equal(t, []string{"test", "test2"}, s, "slice value should be equal to []string{\"test\", \"test2\"}")
+		assert.ElementsMatch(t, []string{"test", "test2"}, s, "slice should hold both map values in any order")
 	})
 }

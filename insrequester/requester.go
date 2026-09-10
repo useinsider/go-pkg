@@ -104,10 +104,10 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 	defer span.End()
 
 	var (
-		res          *http.Response
-		outerErr     error
-		attempt      int
-		lastErrBody  string
+		res         *http.Response
+		outerErr    error
+		attempt     int
+		lastErrBody string
 	)
 
 	if r.runner == nil {
@@ -116,6 +116,7 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 
 	runnerErr := r.runner.Run(ctx, func(attemptCtx context.Context) error {
 		attempt++
+
 		var req *http.Request
 
 		req, outerErr = http.NewRequestWithContext(attemptCtx, httpMethod, re.Endpoint, bytes.NewReader(re.Body))
@@ -126,6 +127,7 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 
 		req.Close = true
 		otel.GetTextMapPropagator().Inject(attemptCtx, propagation.HeaderCarrier(req.Header))
+
 		re.Headers = append(r.headers, re.Headers...) // RequestEntity headers will override Requester level headers.
 		re.applyHeadersToRequest(req)
 
@@ -137,31 +139,17 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 			cp.Timeout = r.timeout
 			client = &cp
 		}
+
 		res, outerErr = client.Do(req)
 		if outerErr != nil {
 			return ErrRetryable
 		}
 
 		if res.StatusCode >= 100 && res.StatusCode < 200 ||
-			res.StatusCode == 429 ||
+			res.StatusCode == http.StatusTooManyRequests ||
 			res.StatusCode >= 500 && res.StatusCode <= 599 {
-			const maxErrBodySize = 4096
-			limitedReader := io.LimitReader(res.Body, maxErrBodySize+1)
-			bodyBytes, _ := io.ReadAll(limitedReader)
-			res.Body.Close()
-			truncated := len(bodyBytes) > maxErrBodySize
-			if truncated {
-				bodyBytes = bodyBytes[:maxErrBodySize]
-			}
-			if len(bodyBytes) > 0 {
-				msg := fmt.Sprintf("%s : %s", res.Status, string(bodyBytes))
-				if truncated {
-					msg += " [truncated]"
-				}
-				lastErrBody = msg
-			} else {
-				lastErrBody = res.Status
-			}
+			lastErrBody = errorBodySummary(res)
+
 			return ErrRetryable
 		}
 
@@ -172,20 +160,24 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 	if attempt > 0 {
 		resendCount = attempt - 1
 	}
+
 	span.SetAttributes(attribute.Int("http.resend_count", resendCount))
 
-	if runnerErr == goresilienceErrors.ErrCircuitOpen {
+	if errors.Is(runnerErr, goresilienceErrors.ErrCircuitOpen) {
 		span.SetStatus(codes.Error, "circuit breaker open")
+
 		if outerErr != nil {
 			return nil, errors.Wrap(ErrCircuitBreakerOpen, outerErr.Error())
 		}
+
 		if lastErrBody != "" {
 			return nil, errors.Wrap(ErrCircuitBreakerOpen, lastErrBody)
 		}
+
 		return nil, ErrCircuitBreakerOpen
 	}
 
-	if runnerErr == goresilienceErrors.ErrTimeout {
+	if errors.Is(runnerErr, goresilienceErrors.ErrTimeout) {
 		span.SetStatus(codes.Error, "timeout")
 		return nil, ErrTimeout
 	}
@@ -193,14 +185,17 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 	if outerErr != nil {
 		span.RecordError(outerErr)
 		span.SetStatus(codes.Error, outerErr.Error())
+
 		return nil, outerErr
 	}
 
 	if runnerErr != nil {
 		span.SetStatus(codes.Error, "retries exhausted")
+
 		if lastErrBody != "" {
 			return nil, errors.Wrap(ErrRetriesExhausted, lastErrBody)
 		}
+
 		return nil, ErrRetriesExhausted
 	}
 
@@ -209,6 +204,35 @@ func (r *Request) sendRequest(ctx context.Context, httpMethod string, re Request
 	}
 
 	return res, nil
+}
+
+// errorBodySummary reads at most maxErrBodySize bytes of a retryable
+// response's body, closes the body, and returns "<status> : <body>" (with a
+// "[truncated]" marker when the body was cut), or just the status when the
+// body is empty.
+func errorBodySummary(res *http.Response) string {
+	const maxErrBodySize = 4096
+
+	limitedReader := io.LimitReader(res.Body, maxErrBodySize+1)
+	bodyBytes, _ := io.ReadAll(limitedReader)
+
+	res.Body.Close()
+
+	truncated := len(bodyBytes) > maxErrBodySize
+	if truncated {
+		bodyBytes = bodyBytes[:maxErrBodySize]
+	}
+
+	if len(bodyBytes) == 0 {
+		return res.Status
+	}
+
+	msg := fmt.Sprintf("%s : %s", res.Status, string(bodyBytes))
+	if truncated {
+		msg += " [truncated]"
+	}
+
+	return msg
 }
 
 func (r RequestEntity) applyHeadersToRequest(request *http.Request) {

@@ -31,7 +31,8 @@ thought and the "downstream service's CI is red" consequence.
 ## Error types
 
 - Exported sentinel errors (`ErrFoo`) are API. Don't rename them, don't
-  wrap them in a way that breaks `errors.Is`.
+  wrap them in a way that breaks `errors.Is`. Their message text is API too:
+  consumers alert on log lines, so leave the string alone in a lint pass.
 - When introducing a richer error, wrap rather than replace: `return
   fmt.Errorf("%w: ...", ErrFoo)` keeps existing `errors.Is(err, ErrFoo)`
   checks green.
@@ -47,9 +48,21 @@ thought and the "downstream service's CI is red" consequence.
 
 The most expensive changes in this repo don't look dangerous:
 - Swapping `int` for `int64` on a config field.
-- Renaming a parameter (fine for callers, not fine for code that uses
-  named args in generated mocks).
+- Renaming a parameter (harmless to callers and to committed mocks; only a
+  regenerated mock picks up the new name — still say why in the PR).
 - Changing the order of arguments in a variadic.
 - Returning a `*Result` where it used to return `Result`.
 
 If a change feels too small to think about, think about it anyway.
+
+## What the linter is allowed to change
+
+`.golangci.yaml` deliberately does not enforce revive's `var-naming` on
+exported identifiers (`Id`, `Url`, `Sql` stay as they are) and does not ask
+for `inscodeerr.CodeErr` to become `CodeError`: both would be major-version
+breaks for every consumer. Unexported names, parameter names and internals
+are fair game — for example `insredis.RedisInterface` parameters `min, max`
+became `minVal, maxVal` / `minSlot, maxSlot` to stop shadowing the Go 1.21
+builtins, which changes no signature. If a future linter finding can only be
+fixed by touching an exported symbol, exclude it by path with a comment in
+`linters.exclusions.rules` and record it for the next major.

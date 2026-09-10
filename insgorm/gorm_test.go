@@ -25,6 +25,7 @@ func TestNewGorm(t *testing.T) {
 		if err != nil {
 			t.Fatalf("sqlmock.New() error = %v", err)
 		}
+
 		m.ExpectQuery("SELECT VERSION()").
 			WillReturnRows(sqlmock.NewRows([]string{"VERSION()"}).AddRow("8.0.30"))
 
@@ -32,6 +33,7 @@ func TestNewGorm(t *testing.T) {
 		if err != nil {
 			t.Fatalf("NewGorm() error = %v", err)
 		}
+
 		if gormDB == nil {
 			t.Fatal("NewGorm() db = nil, want gorm client")
 		}
@@ -46,6 +48,7 @@ func TestWrapWithGorm(t *testing.T) {
 		if err != nil {
 			t.Fatalf("sqlmock.New() error = %v", err)
 		}
+
 		m.ExpectQuery("SELECT VERSION()").
 			WillReturnRows(sqlmock.NewRows([]string{"VERSION()"}).AddRow("8.0.30"))
 
@@ -53,9 +56,11 @@ func TestWrapWithGorm(t *testing.T) {
 		if err != nil {
 			t.Fatalf("WrapWithGorm() error = %v", err)
 		}
+
 		if gormDB == nil {
 			t.Fatal("WrapWithGorm() db = nil, want gorm client")
 		}
+
 		if GetGormClient() != gormDB {
 			t.Error("GetGormClient() returned a different client than WrapWithGorm()")
 		}
@@ -74,6 +79,7 @@ func TestWrapWithGorm(t *testing.T) {
 		if err != nil {
 			t.Fatalf("WrapWithGorm() error = %v", err)
 		}
+
 		if gormDB != first {
 			t.Error("WrapWithGorm() second call returned a new client, want the cached singleton")
 		}
@@ -93,9 +99,11 @@ func TestMockGorm(t *testing.T) {
 		if err := gormDB.Raw("SELECT 1").Scan(&n).Error; err != nil {
 			t.Fatalf("Raw().Scan() error = %v", err)
 		}
+
 		if n != 1 {
 			t.Errorf("scanned %d, want 1", n)
 		}
+
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Errorf("unmet sqlmock expectations: %v", err)
 		}

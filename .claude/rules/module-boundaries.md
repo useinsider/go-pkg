@@ -34,9 +34,22 @@ intuitions about imports and refactors don't quite apply.
 
 - `scripts/check-deps.sh` lists the expected version of every third-party
   dep across all modules. When bumping, update `check-deps.sh` and every
-  `ins*/go.mod` in the same PR — mismatches fail CI.
+  `ins*/go.mod` in the same PR. It is a manual check: no workflow runs it,
+  it only scans top-level `ins*/` (not `insrequester/v3`), and it needs
+  bash 4+. Today `insrequester` v2/v3 are on testify `v1.11.1` against the
+  script's `v1.8.1` pin.
 - New third-party deps should be weighed carefully. Every dep we pin
-  becomes a release coordination burden across 13 modules.
+  becomes a release coordination burden across 14 modules.
+
+## CI discovers modules
+
+- `.github/workflows/lint.yml` (`golangci-lint` check) and
+  `scripts/coverage.sh` (`unit-tests` check) both loop over
+  `find . -name go.mod`. A new module needs no workflow change and must not
+  get its own job or matrix entry — the two check names are the
+  branch-protection contexts.
+- The lint config is one file, `.golangci.yaml` at the repo root, passed
+  with `--config` from inside each module.
 
 ## Release order
 

@@ -12,6 +12,7 @@ func (q *FakeQueue) SendMessageBatch(entries []SQSMessageEntry) (failed []SQSMes
 
 func (q *FakeQueue) DeleteMessageBatch(entries []SQSDeleteMessageEntry) (failed []SQSDeleteMessageEntry, err error) {
 	newData := make([]SQSMessageEntry, 0)
+
 	for _, e := range q.Data {
 		for _, de := range entries {
 			if e.Id != de.Id {
@@ -21,5 +22,6 @@ func (q *FakeQueue) DeleteMessageBatch(entries []SQSDeleteMessageEntry) (failed 
 	}
 
 	q.Data = newData
+
 	return nil, nil
 }

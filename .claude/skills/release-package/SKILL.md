@@ -22,14 +22,15 @@ Then follow the release process:
    - **Minor** (v1.X.0): New features, backward-compatible additions
    - **Major** (vX.0.0): Breaking API changes
 
-2. **Verify tests pass**
+2. **Verify lint and tests pass** (the same gates CI runs as `golangci-lint` and `unit-tests`)
    ```bash
    cd <package>
    go mod tidy
-   go test ./...
+   golangci-lint run --config ../.golangci.yaml ./...   # ../../.golangci.yaml for insrequester/v3
+   go test -race ./...
    ```
 
-3. **Run dependency check**
+3. **Run dependency check** (manual — no workflow runs it)
    ```bash
    ./scripts/check-deps.sh
    ```

@@ -21,6 +21,8 @@ func TestRequest_Methods(t *testing.T) {
 		{
 			name: "it_should_send_put",
 			call: func(t *testing.T, r Requester, re RequestEntity) (*http.Response, error) {
+				t.Helper()
+
 				return r.Put(t.Context(), re)
 			},
 			want: http.MethodPut,
@@ -28,6 +30,8 @@ func TestRequest_Methods(t *testing.T) {
 		{
 			name: "it_should_send_delete",
 			call: func(t *testing.T, r Requester, re RequestEntity) (*http.Response, error) {
+				t.Helper()
+
 				return r.Delete(t.Context(), re)
 			},
 			want: http.MethodDelete,
@@ -37,8 +41,10 @@ func TestRequest_Methods(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var method string
+
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				method = r.Method
+
 				w.WriteHeader(http.StatusOK)
 			}))
 			defer ts.Close()
@@ -67,7 +73,7 @@ func TestRequest_sendRequestEdgeCases(t *testing.T) {
 		defer ts.Close()
 
 		client := &http.Client{
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 				return errors.New("redirects are forbidden")
 			},
 		}
@@ -82,7 +88,8 @@ func TestRequest_sendRequestEdgeCases(t *testing.T) {
 
 	t.Run("it_should_truncate_oversized_error_bodies", func(t *testing.T) {
 		big := strings.Repeat("x", 5000)
-		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			_, _ = w.Write([]byte(big))
 		}))
@@ -150,4 +157,83 @@ func TestRequest_ConfigDefaultsAndClamps(t *testing.T) {
 		require.NotNil(t, r)
 		assert.Len(t, r.policies, 1)
 	})
+}
+
+func Test_failureRateSettings(t *testing.T) {
+	tests := []struct {
+		name           string
+		config         CircuitBreakerConfig
+		wantRate       uint
+		wantExecutions uint
+		wantPeriod     time.Duration
+	}{
+		{
+			name:           "it_should_clamp_rate_above_hundred",
+			config:         CircuitBreakerConfig{FailureRateThreshold: 150, FailureExecutionThreshold: 5, FailureThresholdingPeriod: time.Minute},
+			wantRate:       100,
+			wantExecutions: 5,
+			wantPeriod:     time.Minute,
+		},
+		{
+			name:           "it_should_default_execution_threshold_when_zero",
+			config:         CircuitBreakerConfig{FailureRateThreshold: 50, FailureThresholdingPeriod: time.Minute},
+			wantRate:       50,
+			wantExecutions: 20,
+			wantPeriod:     time.Minute,
+		},
+		{
+			name:           "it_should_default_thresholding_period_when_zero",
+			config:         CircuitBreakerConfig{FailureRateThreshold: 50, FailureExecutionThreshold: 5},
+			wantRate:       50,
+			wantExecutions: 5,
+			wantPeriod:     10 * time.Second,
+		},
+		{
+			name:           "it_should_pass_supplied_values_through_untouched",
+			config:         CircuitBreakerConfig{FailureRateThreshold: 42, FailureExecutionThreshold: 7, FailureThresholdingPeriod: 3 * time.Second},
+			wantRate:       42,
+			wantExecutions: 7,
+			wantPeriod:     3 * time.Second,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rate, executions, period := failureRateSettings(tt.config)
+
+			assert.Equal(t, tt.wantRate, rate)
+			assert.Equal(t, tt.wantExecutions, executions)
+			assert.Equal(t, tt.wantPeriod, period)
+		})
+	}
+}
+
+func Test_consecutiveFailureThreshold(t *testing.T) {
+	tests := []struct {
+		name                 string
+		minimumRequestToOpen int
+		want                 uint
+	}{
+		{
+			name:                 "it_should_default_to_three_when_zero",
+			minimumRequestToOpen: 0,
+			want:                 3,
+		},
+		{
+			name:                 "it_should_clamp_negative_to_zero",
+			minimumRequestToOpen: -5,
+			want:                 0,
+		},
+		{
+			name:                 "it_should_pass_positive_value_through",
+			minimumRequestToOpen: 8,
+			want:                 8,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, consecutiveFailureThreshold(tt.minimumRequestToOpen))
+		})
+	}
 }

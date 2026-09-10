@@ -2,6 +2,7 @@ package inscodeerr
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 )
@@ -65,8 +66,8 @@ func (c CodeErr) Headers() http.Header {
 }
 
 func GetStatusCode(err error) int {
-	e, ok := err.(CodeErr)
-	if !ok {
+	var e CodeErr
+	if !errors.As(err, &e) {
 		return http.StatusInternalServerError
 	}
 
