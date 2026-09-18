@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
+	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	awssqs "github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
@@ -12,6 +13,7 @@ import (
 	"github.com/useinsider/go-pkg/insdash"
 	"github.com/useinsider/go-pkg/inslogger"
 	"github.com/useinsider/go-pkg/inssqs/sqs"
+	"net/http"
 	"sync"
 )
 
@@ -45,6 +47,28 @@ type Config struct {
 	LogLevel          string // Log level for SQS operations.
 
 	EndpointUrl string // Endpoint URL for AWS operations.
+
+	HTTPClient HTTPClient
+}
+
+type HTTPClient interface {
+	Do(*http.Request) (*http.Response, error)
+}
+
+var (
+	sharedHTTPClientOnce sync.Once
+	sharedHTTPClient     HTTPClient
+)
+
+func sharedFrozenHTTPClient(resolved aws.HTTPClient) HTTPClient {
+	sharedHTTPClientOnce.Do(func() {
+		sharedHTTPClient = resolved
+		if buildable, ok := resolved.(*awshttp.BuildableClient); ok {
+			sharedHTTPClient = buildable.Freeze()
+		}
+	})
+
+	return sharedHTTPClient
 }
 
 func NewSQS(config Config) Interface {
@@ -64,6 +88,12 @@ func NewSQS(config Config) Interface {
 		awsconfig.WithRetryMode(aws.RetryModeAdaptive))
 	if err != nil {
 		panic(errors.Wrap(err, "error while loading aws sqs config"))
+	}
+
+	if config.HTTPClient != nil {
+		cfg.HTTPClient = config.HTTPClient
+	} else {
+		cfg.HTTPClient = sharedFrozenHTTPClient(cfg.HTTPClient)
 	}
 
 	// set endpoint url if provided

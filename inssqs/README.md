@@ -69,6 +69,8 @@ if err != nil {
 - MaxBatchSizeBytes: Maximum size of a message batch in bytes.
 - MaxWorkers: Maximum number of workers for concurrent operations.
 - LogLevel: Log level for SQS operations.
+- EndpointUrl: Endpoint URL override for AWS operations (e.g. LocalStack).
+- HTTPClient: Optional HTTP client; defaults to one shared, frozen client per process so repeated NewSQS calls reuse connections.
 For more details on each function and its parameters, refer to the code documentation.
 
 
