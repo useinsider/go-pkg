@@ -42,13 +42,14 @@ func newRemoteAddrRecordingSQSServer(t *testing.T) (*httptest.Server, func() []s
 }
 
 type countingHTTPClient struct {
+	inner HTTPClient
 	calls atomic.Int32
 }
 
 func (c *countingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	c.calls.Add(1)
 
-	return http.DefaultClient.Do(req) //nolint:gosec // test double forwarding to a local httptest server
+	return c.inner.Do(req)
 }
 
 func TestNewSQS_httpClient(t *testing.T) {
@@ -69,7 +70,7 @@ func TestNewSQS_httpClient(t *testing.T) {
 	t.Run("it_should_use_injected_http_client", func(t *testing.T) {
 		setFakeAWSEnv(t)
 		ts := newFakeSQSServer(t, http.StatusOK)
-		client := &countingHTTPClient{}
+		client := &countingHTTPClient{inner: http.DefaultClient}
 
 		NewSQS(Config{Region: "eu-west-1", QueueName: "q", EndpointUrl: ts.URL, HTTPClient: client})
 
