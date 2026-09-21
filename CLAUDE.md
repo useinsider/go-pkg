@@ -78,8 +78,12 @@ each on `develop`.
 
 There is no root module. Both gates run per module:
 
+    # test/integration is excluded: it is the separate `Integration Tests`
+    # check and hard-fails without a real Redis on REDIS_ADDR (no skip branch
+    # by design). Same exclusion scripts/coverage.sh:12 uses. To run it, start
+    # the container first — see .github/workflows/integration-tests.yml.
     root=$(git rev-parse --show-toplevel)
-    for m in $(find . -name go.mod | xargs -n1 dirname); do
+    for m in $(find . -name go.mod -not -path '*/test/integration/*' | xargs -n1 dirname); do
       (cd "$m" && golangci-lint run --config "$root/.golangci.yaml" ./... && go test -race ./...)
     done
 

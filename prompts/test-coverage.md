@@ -52,10 +52,14 @@ struct field, interface, or error sentinel — it can break downstream services.
 
 - **Unit Tests**: REQUIRED — per-module `go test ./...`, aggregated by
   `scripts/coverage.sh` and reported by the `Unit Tests` check.
-- **Integration Tests**: REQUIRED — the `test/integration` module, run by the
-  `Integration Tests` check against a REAL `redis:7.4-alpine` container the
-  workflow starts. Unit-level DB and AWS dependencies stay on go-sqlmock and
-  gomock; the integration module is where a live backend is used.
+- **Integration Tests**: REQUIRED, but BLOCKED — the `test/integration`
+  module, run by the `Integration Tests` check against a REAL
+  `redis:7.4-alpine` container the workflow starts. The check cannot report
+  yet: go-pkg has no runner-group access, so its self-hosted jobs queue and
+  are cancelled (PA-40353). Do not score a PR against this gate until the
+  grant lands — CLAUDE.md's check table is authoritative on the status.
+  Unit-level DB and AWS dependencies stay on go-sqlmock and gomock; the
+  integration module is where a live backend is used.
 - ❌ **Visual Tests**: Not applicable — no UI.
 
 ## Test files are never a coverage gap
