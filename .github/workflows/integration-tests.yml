@@ -1,8 +1,16 @@
 name: Integration Tests
 
 # Mirrors unit-tests.yml: every push, no paths filter. The org ruleset
-# (PA-41643/SD-151996) requires a check named exactly "Integration Tests" on
-# every commit, so this must never be skippable.
+# (PA-41643/SD-151996) requires a check named exactly "Integration Tests", so
+# this must never be skippable.
+#
+# It cannot be made required on go-pkg YET: the repo is not granted access to
+# the runner group, so every self-hosted job here queues and is cancelled
+# without reporting (lint.yml:34-43 records the evidence; PA-40353 tracks the
+# org-admin grant). CLAUDE.md's check table is authoritative on that status —
+# it marks this check BLOCKED. Naming and wiring land now so the check is
+# correct the moment the grant does; making it required before then would put
+# a permanently unreportable context on every commit.
 on: push
 
 permissions:
@@ -47,8 +55,8 @@ jobs:
       - name: Start Redis
         run: |
           set -euo pipefail
-          docker run -d --name "redis_test_${{ github.run_id }}" -P redis:7.4-alpine
-          port="$(docker port "redis_test_${{ github.run_id }}" 6379/tcp | head -1 | sed 's/.*://')"
+          docker run -d --name "redis_test_${{ github.run_id }}_${{ github.run_attempt }}" -P redis:7.4-alpine
+          port="$(docker port "redis_test_${{ github.run_id }}_${{ github.run_attempt }}" 6379/tcp | head -1 | sed 's/.*://')"
           [ -n "$port" ] || { echo "could not read the mapped Redis port"; exit 1; }
           echo "REDIS_ADDR=localhost:$port" >> "$GITHUB_ENV"
           echo "Redis published on $port"
@@ -56,7 +64,7 @@ jobs:
       - name: Wait for Redis
         run: |
           for i in $(seq 1 30); do
-            if docker exec "redis_test_${{ github.run_id }}" redis-cli ping 2>/dev/null | grep -q PONG; then
+            if docker exec "redis_test_${{ github.run_id }}_${{ github.run_attempt }}" redis-cli ping 2>/dev/null | grep -q PONG; then
               echo "Redis is ready"
               exit 0
             fi
@@ -70,9 +78,8 @@ jobs:
       # is tested from its own directory.
       - name: Run integration tests
         working-directory: test/integration
-        env:
         run: go test -count=1 -v ./...
 
       - name: Stop Redis
         if: always()
-        run: docker rm -f "redis_test_${{ github.run_id }}" || true
+        run: docker rm -f "redis_test_${{ github.run_id }}_${{ github.run_attempt }}" || true
