@@ -52,9 +52,11 @@ intuitions about imports and refactors don't quite apply.
   `find . -name go.mod`; coverage.sh skips `test/integration`, which the
   separate `Integration Tests` check
   (`.github/workflows/integration-tests.yml`) runs on its own. A new module
-  needs no workflow change and must not
-  get its own job or matrix entry — the two check names are the
-  branch-protection contexts.
+  needs no workflow change and must not get its own job or matrix entry — the
+  three check names are the branch-protection contexts. The one exception is a
+  module whose tests need a REAL external dependency: it gets its own job, the
+  way `test/integration` does, because `scripts/coverage.sh` must not be made
+  to start containers.
 - The lint config is one file, `.golangci.yaml` at the repo root, passed
   with `--config` from inside each module.
 

@@ -64,11 +64,13 @@ Create a new package: $ARGUMENTS
    - Update `scripts/check-deps.sh` if needed
 
 8. **CI needs no edit**
-   - `.github/workflows/lint.yml` and `scripts/coverage.sh` (the `unit-tests`
+   - `.github/workflows/lint.yml` and `scripts/coverage.sh` (the `Unit Tests`
      check) both discover modules with `find . -name go.mod`, so the new
      module is linted and tested automatically. Do not add a matrix entry
-     or a new job — the `golangci-lint` and `unit-tests` check names are
-     branch-protection contexts and must stay as they are.
+     or a new job — the `golangci-lint`, `Unit Tests` and `Integration Tests`
+     check names are branch-protection contexts and must stay as they are.
+     The one exception is a module whose tests need a real dependency:
+     `test/integration` has its own job for exactly that reason.
 
 9. **Verify**
    ```bash

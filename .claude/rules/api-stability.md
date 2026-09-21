@@ -60,7 +60,7 @@ revive's entire rule set and switches the linter off silently.
 - Run `golangci-lint run --config <repo-root>/.golangci.yaml ./...`,
   `go vet ./...` and `go test -race ./...` inside the package directory.
   CI runs the same lint config as the `golangci-lint` check and the tests
-  as the `unit-tests` check.
+  as the `Unit Tests` check.
 - If you touched an exported symbol, run `gorelease -base=<last-tag>` (or
   eyeball the diff) and confirm the planned version bump is correct.
 - If a dependent `ins*` module needs updating too, note the release order

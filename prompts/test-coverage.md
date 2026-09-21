@@ -51,10 +51,11 @@ struct field, interface, or error sentinel — it can break downstream services.
 ## Test Types (Service Maturity declaration)
 
 - **Unit Tests**: REQUIRED — per-module `go test ./...`, aggregated by
-  `scripts/coverage.sh` and reported by the `unit-tests` check.
-- ❌ **Integration Tests**: Not applicable — this is a library with no
-  deployable artifact; DB and AWS dependencies are covered with go-sqlmock and
-  gomock, never a live backend.
+  `scripts/coverage.sh` and reported by the `Unit Tests` check.
+- **Integration Tests**: REQUIRED — the `test/integration` module, run by the
+  `Integration Tests` check against a REAL `redis:7.4-alpine` container the
+  workflow starts. Unit-level DB and AWS dependencies stay on go-sqlmock and
+  gomock; the integration module is where a live backend is used.
 - ❌ **Visual Tests**: Not applicable — no UI.
 
 ## Test files are never a coverage gap

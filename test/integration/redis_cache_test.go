@@ -11,6 +11,7 @@
 package integration_test
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -119,7 +120,11 @@ func TestInsRedisRoundTripsThroughRealServer(t *testing.T) {
 
 	time.Sleep(300 * time.Millisecond)
 
-	if _, err := c.Get(short).Result(); err != redis.Nil { //nolint:errorlint // redis v6 returns the sentinel unwrapped
+	// errors.Is, not `!=`: it matches the unwrapped sentinel redis v6 returns
+	// AND anything that wraps it later, and it satisfies errorlint without a
+	// suppression. .claude/rules/code-style.md bans inline //nolint —
+	// suppressions belong in .golangci.yaml with a path:/text: narrowing.
+	if _, err := c.Get(short).Result(); !errors.Is(err, redis.Nil) {
 		t.Errorf("GET of an expired key = %v, want redis.Nil", err)
 	}
 

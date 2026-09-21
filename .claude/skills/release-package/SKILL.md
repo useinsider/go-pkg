@@ -22,7 +22,7 @@ Then follow the release process:
    - **Minor** (v1.X.0): New features, backward-compatible additions
    - **Major** (vX.0.0): Breaking API changes
 
-2. **Verify lint and tests pass** (the same gates CI runs as `golangci-lint` and `unit-tests`)
+2. **Verify lint and tests pass** (the same gates CI runs as `golangci-lint` and `Unit Tests`)
    ```bash
    cd <package>
    go mod tidy

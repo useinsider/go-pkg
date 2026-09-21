@@ -32,7 +32,7 @@ Review code changes for API consistency and library quality in the go-pkg multi-
 - Tests use `testify` for assertions
 - Mock interfaces generated via `mockgen` (`golang/mock` in older modules, `go.uber.org/mock` in newer ones); committed, not regenerated in CI
 - `go-sqlmock` for database testing (insgorm, inssql)
-- Tests run per-package: `cd <package> && go test -race ./...`; CI's `unit-tests` check runs `scripts/coverage.sh` over every module
+- Tests run per-package: `cd <package> && go test -race ./...`; CI's `Unit Tests` check runs `scripts/coverage.sh` over every module
 - Test helpers start with `t.Helper()`; type assertions in tests are checked (`thelper`, `forcetypeassert`)
 
 ### Backward Compatibility

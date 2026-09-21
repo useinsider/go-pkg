@@ -58,7 +58,7 @@ The config is the v2 schema; do not add a v1-format file.
 | `Security AllInOne` | `.github/workflows/security_allinone.yml` | `feature/*` push + PR | no |
 | `Block MySQL 5.x Usage` | `.github/workflows/mysql-version-check.yml` | PR to `develop` | no |
 
-**Do not turn on branch protection for `golangci-lint` or `unit-tests` yet.**
+**Do not turn on branch protection for `golangci-lint` or `Unit Tests` yet.**
 No self-hosted workflow has ever completed in this repository: every `Lint`,
 `Unit Tests` and `Security AllInOne` run in its history queued and was
 cancelled. The only successful runs go-pkg has ever had are GitHub-hosted
