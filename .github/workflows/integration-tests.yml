@@ -1,0 +1,66 @@
+name: Integration Tests
+
+# Mirrors unit-tests.yml: every push, no paths filter. The org ruleset
+# (PA-41643/SD-151996) requires a check named exactly "Integration Tests" on
+# every commit, so this must never be skippable.
+on: push
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: integration-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration-tests:
+    name: Integration Tests
+    # Same runner block as unit-tests.yml / lint.yml. As noted there, go-pkg
+    # has no runner-group access yet, which only an org admin can grant.
+    runs-on:
+      group: default
+      labels: self-hosted
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.26.x
+
+      # Plain `docker run` rather than the `services:` key: that is the shape
+      # proven green on this runner pool (useinsider/ucd-web's own
+      # integration-tests.yml).
+      - name: Clean up Redis
+        run: '[ "$(docker ps -a | grep redis_test)" ] && docker rm -f redis_test || true'
+
+      - name: Start Redis
+        run: docker run -d --name redis_test -p 6378:6379 redis:7.4-alpine
+
+      - name: Wait for Redis
+        run: |
+          for i in $(seq 1 30); do
+            if docker exec redis_test redis-cli ping 2>/dev/null | grep -q PONG; then
+              echo "Redis is ready"
+              exit 0
+            fi
+            echo "Waiting for Redis... ($i/30)"
+            sleep 2
+          done
+          echo "Redis did not become ready in 60s"
+          exit 1
+
+      # test/integration is its own module (go-pkg has no root module), so it
+      # is tested from its own directory.
+      - name: Run integration tests
+        working-directory: test/integration
+        env:
+          REDIS_ADDR: localhost:6378
+        run: go test -count=1 -v ./...
+
+      - name: Stop Redis
+        if: always()
+        run: docker rm -f redis_test || true

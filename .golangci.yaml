@@ -46,6 +46,15 @@ linters:
       - builtin$
       - examples$
     rules:
+      # gomoddirectives rejects local `replace` directives. The
+      # test/integration module (the "Integration Tests" check) uses two, on
+      # purpose: it must exercise the ins* packages as they are in this
+      # checkout, not the last published tag. Scoped to that one go.mod — a
+      # local replace in any ins* module is still reported.
+      - linters:
+          - gomoddirectives
+        path: '^test/integration/go\.mod$'
+        text: 'local replacement are not allowed'
       # revive's var-naming would have us rename exported identifiers
       # (Id -> ID, Url -> URL, Api -> API). go-pkg is Insider's PUBLIC shared
       # library: every exported symbol is a long-lived contract and a rename

@@ -6,7 +6,10 @@ OUT="${COVERAGE_OUT:-$ROOT/coverage.out}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-MODULES="$(find "$ROOT" -name go.mod -not -path '*/vendor/*' -exec dirname {} \; | sort)"
+# test/integration is excluded on purpose: it is the "Integration Tests" check's
+# module (.github/workflows/integration-tests.yml). Running it here would double
+# up the two required checks, and it carries no production statements to cover.
+MODULES="$(find "$ROOT" -name go.mod -not -path '*/vendor/*' -not -path '*/test/integration/*' -exec dirname {} \; | sort)"
 
 i=0
 FAILED=0

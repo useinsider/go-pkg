@@ -50,7 +50,8 @@ The config is the v2 schema; do not add a v1-format file.
 | Check | Workflow | Trigger | Required (once PA-40353 Task 6 lands) |
 |---|---|---|---|
 | `golangci-lint` | `.github/workflows/lint.yml` | push (develop, master) + PR | BLOCKED — see below |
-| `unit-tests` | `.github/workflows/unit-tests.yml` | push | BLOCKED — see below |
+| `Unit Tests` | `.github/workflows/unit-tests.yml` | push | BLOCKED — see below |
+| `Integration Tests` | `.github/workflows/integration-tests.yml` | push | BLOCKED — see below |
 | `AI Code Review` | `.github/workflows/ai-code-review.yml` | PR | no |
 | `AI Test Coverage` | `.github/workflows/ai-test-coverage.yml` | PR | no |
 | `AI Security Review` | `.github/workflows/ai-security-review.yml` | PR + issue comment | no |
@@ -120,7 +121,7 @@ See [RELEASING.md](RELEASING.md) and [CONTRIBUTING.md](CONTRIBUTING.md) for the 
 - `PreToolUse` — `.claude/hooks/block-env-files.sh` refuses edits to `.env*`, `*.pem`, credential files, and service-account JSON.
 
 ## Testing
-Tests use `testify` for assertions and `go-sqlmock`/mocks for database testing. Run tests per-package with `-race`, not from the repo root. CI's `unit-tests` job runs `scripts/coverage.sh`, which executes `go test ./... -count=1 -coverprofile` in every module, merges the profiles (generated `*_mock.go` files excluded) and uploads them to Coverus.
+Tests use `testify` for assertions and `go-sqlmock`/mocks for database testing. Run tests per-package with `-race`, not from the repo root. CI's `Unit Tests` job runs `scripts/coverage.sh`, which executes `go test ./... -count=1 -coverprofile` in every module *except* `test/integration`, merges the profiles (generated `*_mock.go` files excluded) and uploads them to Coverus. `test/integration` is its own module holding cross-package end-to-end tests and is run by the separate `Integration Tests` check (`cd test/integration && go test ./...`).
 
 ## Rule Imports
 

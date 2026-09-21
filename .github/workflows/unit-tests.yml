@@ -17,6 +17,9 @@ concurrency:
 
 jobs:
   unit-tests:
+    # Must stay exactly "Unit Tests": the org ruleset (PA-41643/SD-151996)
+    # makes a check of that name required, and a check's name is this field.
+    name: Unit Tests
     # Same block as lint.yml and security_allinone.yml. See the note in
     # lint.yml: this does not by itself make the job run — go-pkg has no
     # runner-group access, which only an org admin can grant.

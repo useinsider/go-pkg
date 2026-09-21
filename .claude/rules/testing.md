@@ -9,11 +9,22 @@
 - Each package has its own `go.mod`, so tests run per-package:
   `cd <pkg> && go test -race ./...`. Never `go test ./...` from the repo
   root — there is no root module.
-- CI: the `unit-tests` check (`.github/workflows/unit-tests.yml`, on push)
+- Cross-package end-to-end tests live in the `test/integration` module
+  (`cd test/integration && go test ./...`), which wires several `ins*`
+  packages together against a REAL dependency — a `redis:7.4-alpine`
+  container the workflow starts, dialled at `REDIS_ADDR` (default
+  `localhost:6378`). Never stub that boundary and never `t.Skip` when the
+  container is absent: `Integration Tests` is a required check, so a skip is
+  a silent pass. Single-package tests stay next to their code and stay
+  docker-free.
+- CI: the `Unit Tests` check (`.github/workflows/unit-tests.yml`, on push)
   runs `scripts/coverage.sh`, which does `go test ./... -count=1
-  -coverprofile` in every module found by `find . -name go.mod`, merges the
-  profiles (committed `*_mock.go` files excluded) and uploads to Coverus. A
-  failing test in any module fails the check. The `golangci-lint` check
+  -coverprofile` in every module found by `find . -name go.mod` *except*
+  `test/integration`, merges the profiles (committed `*_mock.go` files
+  excluded) and uploads to Coverus. The `Integration Tests` check
+  (`.github/workflows/integration-tests.yml`, on push) runs the
+  `test/integration` module on its own. A failing test in any module fails
+  its check. The `golangci-lint` check
   lints test files with the same `.golangci.yaml` as production code.
 
 ## Frameworks

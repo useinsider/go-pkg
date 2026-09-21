@@ -16,7 +16,11 @@ intuitions about imports and refactors don't quite apply.
 
 - Cross-imports go through the published path:
   `github.com/useinsider/go-pkg/insdash` — not a relative path, not a
-  local replace directive.
+  local replace directive. The one exception is the test-only
+  `test/integration` module, which `replace`s the packages it wires
+  together with their working-tree paths so the `Integration Tests` check
+  exercises this checkout rather than the last published tag
+  (`.golangci.yaml` excludes `gomoddirectives` for that one `go.mod`).
 - Current dependency chain:
   - `inssqs` → `insdash`, `inslogger`
   - `insssm` → `inscacheable`
@@ -44,8 +48,11 @@ intuitions about imports and refactors don't quite apply.
 ## CI discovers modules
 
 - `.github/workflows/lint.yml` (`golangci-lint` check) and
-  `scripts/coverage.sh` (`unit-tests` check) both loop over
-  `find . -name go.mod`. A new module needs no workflow change and must not
+  `scripts/coverage.sh` (`Unit Tests` check) both loop over
+  `find . -name go.mod`; coverage.sh skips `test/integration`, which the
+  separate `Integration Tests` check
+  (`.github/workflows/integration-tests.yml`) runs on its own. A new module
+  needs no workflow change and must not
   get its own job or matrix entry — the two check names are the
   branch-protection contexts.
 - The lint config is one file, `.golangci.yaml` at the repo root, passed
