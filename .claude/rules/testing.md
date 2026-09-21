@@ -14,8 +14,10 @@
   packages together against a REAL dependency — a `redis:7.4-alpine`
   container the workflow starts, dialled at `REDIS_ADDR` (default
   `localhost:6378`). Never stub that boundary and never `t.Skip` when the
-  container is absent: `Integration Tests` is a required check, so a skip is
-  a silent pass. Single-package tests stay next to their code and stay
+  container is absent: `Integration Tests` will be a required check, so a
+  skip is a silent pass. (It is BLOCKED today — go-pkg has no runner-group
+  access, PA-40353. CLAUDE.md's check table is the single source of truth on
+  that status.) Single-package tests stay next to their code and stay
   docker-free.
 - CI: the `Unit Tests` check (`.github/workflows/unit-tests.yml`, on push)
   runs `scripts/coverage.sh`, which does `go test ./... -count=1

@@ -13,9 +13,11 @@ name: Integration Tests
 # a permanently unreportable context on every commit.
 on: push
 
+# contents: read only — unlike unit-tests.yml this job has no coverus
+# upload and no other OIDC consumer, so it mints no token. Same shape as
+# lint.yml.
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -78,7 +80,12 @@ jobs:
       # is tested from its own directory.
       - name: Run integration tests
         working-directory: test/integration
-        run: go test -count=1 -v ./...
+        # -race per .claude/rules/testing.md: this is the only module that
+        # exercises real cross-package concurrency (inscacheable starts a
+        # background `go cache.Start()` goroutine while the test reads the
+        # loader counter via sync/atomic), so a race here would otherwise pass
+        # silently.
+        run: go test -race -count=1 -v ./...
 
       - name: Stop Redis
         if: always()
