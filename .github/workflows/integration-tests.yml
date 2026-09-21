@@ -10,7 +10,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: integration-tests-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
