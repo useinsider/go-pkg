@@ -11,7 +11,11 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Guarded, not plain `true`: these are REQUIRED checks. Two merges landing
+  # on the default branch inside one job window would cancel the earlier
+  # commit's run, leaving a required check with a 'cancelled' conclusion
+  # and no usable status on that commit. PR branches still supersede.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/develop' && github.ref != 'refs/heads/master' }}
 
 jobs:
   integration-tests:
@@ -34,16 +38,25 @@ jobs:
       # Plain `docker run` rather than the `services:` key: that is the shape
       # proven green on this runner pool (useinsider/ucd-web's own
       # integration-tests.yml).
-      - name: Clean up Redis
-        run: '[ "$(docker ps -a | grep redis_test)" ] && docker rm -f redis_test || true'
-
+      # Container name AND host port are scoped to this run. Two pushes on
+      # different branches are in different concurrency groups, so neither
+      # cancels the other; on a shared self-hosted host a fixed name meant the
+      # second job's cleanup killed the first job's server mid-test, and a
+      # fixed -p 6378:6379 meant the second `docker run` failed with "port is
+      # already allocated". Either reds a required check for an unrelated push.
       - name: Start Redis
-        run: docker run -d --name redis_test -p 6378:6379 redis:7.4-alpine
+        run: |
+          set -euo pipefail
+          docker run -d --name "redis_test_${{ github.run_id }}" -P redis:7.4-alpine
+          port="$(docker port "redis_test_${{ github.run_id }}" 6379/tcp | head -1 | sed 's/.*://')"
+          [ -n "$port" ] || { echo "could not read the mapped Redis port"; exit 1; }
+          echo "REDIS_ADDR=localhost:$port" >> "$GITHUB_ENV"
+          echo "Redis published on $port"
 
       - name: Wait for Redis
         run: |
           for i in $(seq 1 30); do
-            if docker exec redis_test redis-cli ping 2>/dev/null | grep -q PONG; then
+            if docker exec "redis_test_${{ github.run_id }}" redis-cli ping 2>/dev/null | grep -q PONG; then
               echo "Redis is ready"
               exit 0
             fi
@@ -58,9 +71,8 @@ jobs:
       - name: Run integration tests
         working-directory: test/integration
         env:
-          REDIS_ADDR: localhost:6378
         run: go test -count=1 -v ./...
 
       - name: Stop Redis
         if: always()
-        run: docker rm -f redis_test || true
+        run: docker rm -f "redis_test_${{ github.run_id }}" || true
