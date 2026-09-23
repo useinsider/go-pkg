@@ -59,7 +59,7 @@ The config is the v2 schema; do not add a v1-format file.
 
 **go-pkg is a public repository, and public repositories get no self-hosted
 runner** (DevOps policy, confirmed 2026-09-23). Every self-hosted workflow here
-(`Unit Tests`, `Security AllInOne`) queues until cancelled, and the AI review
+(`Unit Tests`, `Security AllInOne`, `Block MySQL 5.x Usage`) queues until cancelled, and the AI review
 workflows fail at startup because they call reusable workflows in a private
 repository. `golangci-lint` is the one required check, so `lint.yml` runs on the
 GitHub-hosted `ubuntu-latest` runner; it needs no secrets and no internal network.

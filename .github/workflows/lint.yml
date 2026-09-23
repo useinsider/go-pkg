@@ -32,13 +32,14 @@ jobs:
     name: golangci-lint
     # GitHub-hosted: go-pkg is public, and public repos get no self-hosted runner.
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26"
+          cache-dependency-path: "**/go.sum"
 
       - name: Install golangci-lint
         run: |
