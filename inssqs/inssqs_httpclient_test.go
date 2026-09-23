@@ -54,6 +54,7 @@ func (c *countingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 
 func TestNewSQS_httpClient(t *testing.T) {
 	t.Run("it_should_reuse_http_connection_across_NewSQS_calls", func(t *testing.T) {
+		resetSharedHTTPClient(t)
 		setFakeAWSEnv(t)
 		ts, remoteAddrs := newRemoteAddrRecordingSQSServer(t)
 

@@ -57,6 +57,7 @@ func setFakeAWSEnv(t *testing.T) {
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "test-secret-key")
 	t.Setenv("AWS_SESSION_TOKEN", "")
 	t.Setenv("AWS_REGION", "eu-west-1")
+	t.Setenv("AWS_CA_BUNDLE", "")
 }
 
 func TestConfig_setDefaults(t *testing.T) {

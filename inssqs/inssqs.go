@@ -62,6 +62,10 @@ var (
 
 func sharedFrozenHTTPClient(resolved aws.HTTPClient) HTTPClient {
 	sharedHTTPClientOnce.Do(func() {
+		if resolved == nil {
+			resolved = awshttp.NewBuildableClient()
+		}
+
 		sharedHTTPClient = resolved
 		if buildable, ok := resolved.(*awshttp.BuildableClient); ok {
 			sharedHTTPClient = buildable.Freeze()
