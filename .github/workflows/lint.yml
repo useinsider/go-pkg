@@ -30,19 +30,8 @@ jobs:
     # context list would churn on every module added. The name also carries the
     # "golangci"/"lint" token the Service Maturity tokenizer matches.
     name: golangci-lint
-    # Matches go-pkg-private's lint.yml and this repo's security_allinone.yml.
-    # NOTE: this alone does NOT make the job run. No self-hosted workflow has
-    # ever completed in go-pkg — every Lint, Unit Tests and Security AllInOne
-    # run in the repo's history queued and was cancelled, including
-    # security_allinone.yml, which has always used this exact block. The label
-    # form was never the cause: the go-pkg repository is not granted access to
-    # the runner group, which is an org-level setting no workflow edit can
-    # reach. go-pkg-private uses the identical block and schedules instantly.
-    # Until an org admin adds go-pkg to the runner group, golangci-lint and
-    # unit-tests cannot go green and must not be made required (PA-40353).
-    runs-on:
-      group: default
-      labels: self-hosted
+    # GitHub-hosted: go-pkg is public, and public repos get no self-hosted runner.
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
