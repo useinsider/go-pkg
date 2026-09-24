@@ -1,0 +1,49 @@
+name: Unit Tests
+
+on: push
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: unit-tests-${{ github.ref }}
+  # Supersede in-flight runs on every branch EXCEPT the default ones, so a
+  # default-branch run always finishes and leaves a readable check on the head
+  # commit. Gated on the ref rather than github.event_name: this workflow only
+  # triggers on push, so an event_name == 'pull_request' test is always false
+  # and the guard would do nothing at all.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/develop' && github.ref != 'refs/heads/master' }}
+
+jobs:
+  unit-tests:
+    # Same block as lint.yml and security_allinone.yml. See the note in
+    # lint.yml: this does not by itself make the job run — go-pkg has no
+    # runner-group access, which only an org admin can grant.
+    runs-on:
+      group: default
+      labels: self-hosted
+    # Cap the job so a wedged runner cannot hold a self-hosted slot and the
+    # unit-tests-${{ github.ref }} concurrency group for the 6-hour default.
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.26.x
+
+      - name: Run tests with merged coverage
+        run: |
+          chmod +x scripts/coverage.sh
+          COVERAGE_OUT="$GITHUB_WORKSPACE/coverage.out" ./scripts/coverage.sh
+
+      - name: Upload coverage to coverus
+        uses: useinsider/coverus-action@v2
+        with:
+          coverage-format: golang
+          coverage-file: coverage.out
+          golang-module-name: github.com/useinsider/go-pkg
+          track-slug: unit-tests

@@ -22,6 +22,7 @@ type MockKinesisInterfaceMockRecorder struct {
 func NewMockKinesisInterface(ctrl *gomock.Controller) *MockKinesisInterface {
 	mock := &MockKinesisInterface{ctrl: ctrl}
 	mock.recorder = &MockKinesisInterfaceMockRecorder{mock}
+
 	return mock
 }
 
@@ -36,6 +37,7 @@ func (m *MockKinesisInterface) PutRecords(input *kinesis.PutRecordsInput) (*kine
 	ret := m.ctrl.Call(m, "PutRecords", input)
 	ret0, _ := ret[0].(*kinesis.PutRecordsOutput)
 	ret1, _ := ret[1].(error)
+
 	return ret0, ret1
 }
 
@@ -60,6 +62,7 @@ type MockStreamInterfaceMockRecorder struct {
 func NewMockStreamInterface(ctrl *gomock.Controller) *MockStreamInterface {
 	mock := &MockStreamInterface{ctrl: ctrl}
 	mock.recorder = &MockStreamInterfaceMockRecorder{mock}
+
 	return mock
 }
 
@@ -85,6 +88,7 @@ func (m *MockStreamInterface) Put(record any) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Put", record)
 	ret0, _ := ret[0].(error)
+
 	return ret0
 }
 

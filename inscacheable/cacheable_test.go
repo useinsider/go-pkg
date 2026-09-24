@@ -19,9 +19,11 @@ func TestCachableLoader(t *testing.T) {
 		if counter == 3 {
 			return CustomResponse{nil, errors.New("items depleted")}
 		}
+
 		counter++
 		value := counter
 		msg := fmt.Sprintf("key %s is %d", key, value)
+
 		return CustomResponse{&msg, nil}
 	}
 
@@ -53,8 +55,7 @@ func TestCachableLoader(t *testing.T) {
 		assert.Equal(t, "key A is 1", actual1)
 	})
 
-	// Expire the cache
-	time.Sleep(ttl)
+	time.Sleep(ttl + 200*time.Millisecond)
 
 	t.Run("it_should_get_the_third_item", func(t *testing.T) {
 		actual3 := *c.Get("A").value
@@ -70,5 +71,4 @@ func TestCachableLoader(t *testing.T) {
 		actualErr := c.Get("B").err
 		assert.EqualError(t, actualErr, "items depleted")
 	})
-
 }

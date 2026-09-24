@@ -24,16 +24,22 @@ Some modules depend on sibling modules — release the dependency first:
 
 ## Notable external dependencies (per module)
 
-- `insredis` → `go-redis/redis`
-- `inssqs` → `aws-sdk-go-v2` (config, sqs), `smithy-go`
-- `insssm` → `aws-sdk-go-v2` (ssm)
-- `inskinesis` → `aws-sdk-go-v2` (kinesis)
+- `insredis` → `go-redis/redis` (v6)
+- `inssqs` → `aws-sdk-go-v2` (config, sqs), `smithy-go`, `pkg/errors`
+- `insssm` → `Jamil-Najafov/go-aws-ssm` (wraps aws-sdk-go v1)
+- `inskinesis` → `aws-sdk-go` v1 (kinesis), `google/uuid`
 - `inslogger` → `go.uber.org/zap`
-- `insgorm` / `inssql` → `gorm.io/gorm`, `go-sql-driver/mysql`,
-  `DATA-DOG/go-sqlmock` (test)
-- `insrequester` → `slok/goresilience` (retry / circuit breaker)
+- `insgorm` → `gorm.io/gorm`, `gorm.io/driver/mysql`, `DATA-DOG/go-sqlmock` (test)
+- `inssql` → `database/sql` only; `DATA-DOG/go-sqlmock` (test). The caller
+  registers the driver.
+- `insrequester` (module path `/v2`) → `slok/goresilience` (retry / circuit
+  breaker), `pkg/errors`, OpenTelemetry (`go.opentelemetry.io/otel`)
+- `insrequester/v3` → `failsafe-go/failsafe-go` (retry / circuit breaker),
+  OpenTelemetry
 - `inssentry` → `getsentry/sentry-go`
-- Shared: `stretchr/testify`, `golang/mock` / `go.uber.org/mock`, `pkg/errors`
+- `inscacheable` → `jellydator/ttlcache/v3`
+- Shared: `stretchr/testify`, `golang/mock` (insredis, insrequester v2) /
+  `go.uber.org/mock` (inskinesis, inssqs, insrequester v3)
 
 Third-party versions are pinned across modules via `scripts/check-deps.sh`;
 update it in the same PR as any version bump.

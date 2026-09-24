@@ -1,9 +1,11 @@
 package inskinesis
 
 import (
-	"github.com/aws/aws-sdk-go/aws/request"
+	"errors"
 	"net"
 	"strings"
+
+	"github.com/aws/aws-sdk-go/aws/request"
 )
 
 // CustomRetryer retries on "connection reset by peer"
@@ -12,11 +14,13 @@ type CustomRetryer struct {
 }
 
 func (r CustomRetryer) ShouldRetry(req *request.Request) bool {
-	if err, ok := req.Error.(net.Error); ok && err.Timeout() {
+	var netErr net.Error
+	if errors.As(req.Error, &netErr) && netErr.Timeout() {
 		return true
 	}
 
-	if opErr, ok := req.Error.(*net.OpError); ok && strings.Contains(opErr.Err.Error(), "connection reset by peer") {
+	var opErr *net.OpError
+	if errors.As(req.Error, &opErr) && strings.Contains(opErr.Err.Error(), "connection reset by peer") {
 		return true
 	}
 

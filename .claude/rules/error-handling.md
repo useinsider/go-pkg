@@ -6,11 +6,18 @@
   that crashes their service, not ours.
 - `panic` is acceptable only for truly impossible states during init
   (e.g. malformed package-internal constants). Document it as such.
+- Existing exceptions that are now API and must not change without a major
+  bump: `inssqs.NewSQS` (missing `Region`/`QueueName`, AWS config or queue
+  URL failure), `insssm` (SSM init/get failures), `inssentry.Fatal`.
 
 ## Wrap with context
 
 - `fmt.Errorf("reading config: %w", err)` preserves the chain for
   `errors.Is`/`errors.As`. Plain `fmt.Errorf("%v", err)` breaks it.
+- Compare with `errors.Is` and assert with `errors.As`, never `==` or a
+  direct type assertion on an error — `errorlint` in `.golangci.yaml`
+  rejects both. When the value comes from `recover()` it is an
+  `interface{}`: assert to `error` first, then `errors.Is`.
 - The `pkg/errors` package is pinned across modules (v0.9.1); prefer
   stdlib `%w` for new code unless an existing file already uses
   `errors.Wrap`.
@@ -27,7 +34,9 @@
 
 - `inscodeerr` carries HTTP-aware error codes. Return a `CodeErr` from a
   package only when the caller is an HTTP handler; otherwise return a
-  plain error and let the caller wrap it.
+  plain error and let the caller wrap it. (`errname` would prefer
+  `CodeError`; the type is exported and excluded by path in
+  `.golangci.yaml` — do not rename it.)
 - Don't import `inscodeerr` in low-level packages (cache, logger, SQS);
   they have no business knowing about HTTP.
 
@@ -42,3 +51,9 @@
 
 - Never return `(nil, nil)` for a "lookup miss" — return a sentinel like
   `ErrNotFound`. Callers forget to check the value when the error is nil.
+  (`nilnil`/`nilerr` enforce this. The one intentional exception is the
+  request-build path inside `insrequester`'s retry closure, which returns
+  nil so the policy does not retry an unbuildable request and surfaces the
+  error via `outerErr`; `.golangci.yaml` exempts only that statement shape
+  (`return nil` / `return nil, nil`) in the two `requester.go` files via a
+  `source:` matcher, so other error-swallowing returns there still fail.)

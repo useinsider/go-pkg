@@ -24,6 +24,7 @@ type MockSubscribeToShardEventStreamEventMockRecorder struct {
 func NewMockSubscribeToShardEventStreamEvent(ctrl *gomock.Controller) *MockSubscribeToShardEventStreamEvent {
 	mock := &MockSubscribeToShardEventStreamEvent{ctrl: ctrl}
 	mock.recorder = &MockSubscribeToShardEventStreamEventMockRecorder{mock}
+
 	return mock
 }
 
@@ -38,6 +39,7 @@ func (m *MockSubscribeToShardEventStreamEvent) MarshalEvent(arg0 protocol.Payloa
 	ret := m.ctrl.Call(m, "MarshalEvent", arg0)
 	ret0, _ := ret[0].(eventstream.Message)
 	ret1, _ := ret[1].(error)
+
 	return ret0, ret1
 }
 
@@ -52,6 +54,7 @@ func (m *MockSubscribeToShardEventStreamEvent) UnmarshalEvent(arg0 protocol.Payl
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UnmarshalEvent", arg0, arg1)
 	ret0, _ := ret[0].(error)
+
 	return ret0
 }
 
@@ -59,18 +62,6 @@ func (m *MockSubscribeToShardEventStreamEvent) UnmarshalEvent(arg0 protocol.Payl
 func (mr *MockSubscribeToShardEventStreamEventMockRecorder) UnmarshalEvent(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnmarshalEvent", reflect.TypeOf((*MockSubscribeToShardEventStreamEvent)(nil).UnmarshalEvent), arg0, arg1)
-}
-
-// eventSubscribeToShardEventStream mocks base method.
-func (m *MockSubscribeToShardEventStreamEvent) eventSubscribeToShardEventStream() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "eventSubscribeToShardEventStream")
-}
-
-// eventSubscribeToShardEventStream indicates an expected call of eventSubscribeToShardEventStream.
-func (mr *MockSubscribeToShardEventStreamEventMockRecorder) eventSubscribeToShardEventStream() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "eventSubscribeToShardEventStream", reflect.TypeOf((*MockSubscribeToShardEventStreamEvent)(nil).eventSubscribeToShardEventStream))
 }
 
 // MockSubscribeToShardEventStreamReader is a mock of SubscribeToShardEventStreamReader interface.
@@ -88,6 +79,7 @@ type MockSubscribeToShardEventStreamReaderMockRecorder struct {
 func NewMockSubscribeToShardEventStreamReader(ctrl *gomock.Controller) *MockSubscribeToShardEventStreamReader {
 	mock := &MockSubscribeToShardEventStreamReader{ctrl: ctrl}
 	mock.recorder = &MockSubscribeToShardEventStreamReaderMockRecorder{mock}
+
 	return mock
 }
 
@@ -101,6 +93,7 @@ func (m *MockSubscribeToShardEventStreamReader) Close() error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Close")
 	ret0, _ := ret[0].(error)
+
 	return ret0
 }
 
@@ -115,6 +108,7 @@ func (m *MockSubscribeToShardEventStreamReader) Err() error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Err")
 	ret0, _ := ret[0].(error)
+
 	return ret0
 }
 
@@ -129,6 +123,7 @@ func (m *MockSubscribeToShardEventStreamReader) Events() <-chan kinesis.Subscrib
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Events")
 	ret0, _ := ret[0].(<-chan kinesis.SubscribeToShardEventStreamEvent)
+
 	return ret0
 }
 

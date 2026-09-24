@@ -3,7 +3,7 @@ package inssqs
 import "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 
 type entry interface {
-	getId() *string
+	getID() *string
 }
 
 type SQSMessageEntry struct {
@@ -14,7 +14,7 @@ type SQSMessageEntry struct {
 	MessageGroupId         *string
 }
 
-func (e SQSMessageEntry) getId() *string {
+func (e SQSMessageEntry) getID() *string {
 	return e.Id
 }
 
@@ -33,7 +33,7 @@ type SQSDeleteMessageEntry struct {
 	ReceiptHandle *string
 }
 
-func (e SQSDeleteMessageEntry) getId() *string {
+func (e SQSDeleteMessageEntry) getID() *string {
 	return e.Id
 }
 

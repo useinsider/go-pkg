@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
+	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	awssqs "github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
@@ -12,6 +13,7 @@ import (
 	"github.com/useinsider/go-pkg/insdash"
 	"github.com/useinsider/go-pkg/inslogger"
 	"github.com/useinsider/go-pkg/inssqs/sqs"
+	"net/http"
 	"sync"
 )
 
@@ -21,10 +23,9 @@ type Interface interface {
 }
 
 type queue struct {
-	client   sqs.API
-	name     string
-	url      *string
-	endpoint string
+	client sqs.API
+	name   string
+	url    *string
 
 	retryCount int
 
@@ -46,6 +47,32 @@ type Config struct {
 	LogLevel          string // Log level for SQS operations.
 
 	EndpointUrl string // Endpoint URL for AWS operations.
+
+	HTTPClient HTTPClient
+}
+
+type HTTPClient interface {
+	Do(*http.Request) (*http.Response, error)
+}
+
+var (
+	sharedHTTPClientOnce sync.Once
+	sharedHTTPClient     HTTPClient
+)
+
+func sharedFrozenHTTPClient(resolved aws.HTTPClient) HTTPClient {
+	sharedHTTPClientOnce.Do(func() {
+		if resolved == nil {
+			resolved = awshttp.NewBuildableClient()
+		}
+
+		sharedHTTPClient = resolved
+		if buildable, ok := resolved.(*awshttp.BuildableClient); ok {
+			sharedHTTPClient = buildable.Freeze()
+		}
+	})
+
+	return sharedHTTPClient
 }
 
 func NewSQS(config Config) Interface {
@@ -65,6 +92,12 @@ func NewSQS(config Config) Interface {
 		awsconfig.WithRetryMode(aws.RetryModeAdaptive))
 	if err != nil {
 		panic(errors.Wrap(err, "error while loading aws sqs config"))
+	}
+
+	if config.HTTPClient != nil {
+		cfg.HTTPClient = config.HTTPClient
+	} else {
+		cfg.HTTPClient = sharedFrozenHTTPClient(cfg.HTTPClient)
 	}
 
 	// set endpoint url if provided
@@ -89,12 +122,12 @@ func NewSQS(config Config) Interface {
 		maxBatchSizeBytes: config.MaxBatchSizeBytes,
 	}
 
-	qUrl, err := q.getQueueUrl()
+	qURL, err := q.getQueueURL()
 	if err != nil {
 		panic(errors.Wrap(err, "error while getting queue url"))
 	}
 
-	q.url = qUrl
+	q.url = qURL
 
 	return q
 }
@@ -298,22 +331,22 @@ func (q *queue) sendMessageBatch(entries []SQSMessageEntry, retryCount int) (fai
 	return q.sendMessageBatch(failedEntries, retryCount-1)
 }
 
-// getQueueUrl retrieves the URL of an SQS queue based on its name using the provided SQS client.
+// getQueueURL retrieves the URL of an SQS queue based on its name using the provided SQS client.
 //
 // This function fetches the queue URL if it's not already cached within the 'queue' instance.
 //
 // Returns:
-// - queueUrl: A pointer to a string containing the URL of the SQS queue.
+// - queueURL: A pointer to a string containing the URL of the SQS queue.
 // - err: An error if fetching the queue URL fails after all retry attempts, nil otherwise.
-func (q *queue) getQueueUrl() (queueUrl *string, err error) {
+func (q *queue) getQueueURL() (queueURL *string, err error) {
 	if q.url != nil {
 		return q.url, nil
 	}
 
-	return q.getQueueUrlWithRetry(q.retryCount)
+	return q.getQueueURLWithRetry(q.retryCount)
 }
 
-func (q *queue) getQueueUrlWithRetry(retryCount int) (*string, error) {
+func (q *queue) getQueueURLWithRetry(retryCount int) (*string, error) {
 	if retryCount == 0 {
 		return nil, ErrRetryCountExceeded
 	}
@@ -322,7 +355,7 @@ func (q *queue) getQueueUrlWithRetry(retryCount int) (*string, error) {
 		QueueName: aws.String(q.name),
 	})
 	if err != nil {
-		return q.getQueueUrlWithRetry(retryCount - 1)
+		return q.getQueueURLWithRetry(retryCount - 1)
 	}
 
 	q.url = res.QueueUrl
@@ -334,9 +367,10 @@ func (q *queue) getQueueUrlWithRetry(retryCount int) (*string, error) {
 // Returns a slice of elements corresponding to the failed IDs, maintaining the original order.
 func getFailedEntries[T entry](entries []T, failed []types.BatchResultErrorEntry) []T {
 	failedEntries := make([]T, len(failed))
+
 	for i, f := range failed {
 		for _, e := range entries {
-			if *e.getId() == *f.Id {
+			if *e.getID() == *f.Id {
 				failedEntries[i] = e
 			}
 		}
@@ -389,21 +423,27 @@ func doConcurrently[T any](batches [][]T, workers int, retryCount int, f func([]
 
 	concurrentLimiter := make(chan struct{}, workers)
 	wg := sync.WaitGroup{}
+
 	var mu sync.Mutex
+
 	var outerErr error
+
 	failedEntriesChan := make(chan []T)
 
 	setErr := func(err error) {
 		mu.Lock()
 		defer mu.Unlock()
+
 		outerErr = err
 	}
 
 	for _, batch := range batches {
 		wg.Add(1)
+
 		go func(b []T) {
 			defer wg.Done()
 			concurrentLimiter <- struct{}{}
+
 			defer func() { <-concurrentLimiter }()
 			defer func() {
 				if r := recover(); r != nil {
@@ -411,6 +451,7 @@ func doConcurrently[T any](batches [][]T, workers int, retryCount int, f func([]
 					failedEntriesChan <- b
 				}
 			}()
+
 			fe, err := f(b, retryCount+1)
 			if err != nil {
 				setErr(err)

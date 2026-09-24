@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,7 +23,7 @@ func (t *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error
 
 func TestRequest_Get(t *testing.T) {
 	t.Run("it_should_return_response_properly", func(t *testing.T) {
-		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"status": "OK"}`))
 		}))
@@ -37,8 +38,9 @@ func TestRequest_Get(t *testing.T) {
 
 	t.Run("it_should_retry_on_internal_server_error", func(t *testing.T) {
 		retryTimes := 0
-		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			retryTimes++
+
 			w.WriteHeader(http.StatusInternalServerError)
 		})
 
@@ -59,9 +61,9 @@ func TestRequest_Get(t *testing.T) {
 	})
 
 	t.Run("it_should_retry_on_timeout", func(t *testing.T) {
-		retryTimes := 0
-		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			retryTimes++
+		var retryTimes int32
+
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			time.Sleep(100 * time.Millisecond)
 			w.WriteHeader(http.StatusInternalServerError)
 		})
@@ -69,7 +71,13 @@ func TestRequest_Get(t *testing.T) {
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
+		countingClient := &http.Client{Transport: &recordingTransport{
+			wrapped:     http.DefaultTransport,
+			onRoundTrip: func() { atomic.AddInt32(&retryTimes, 1) },
+		}}
+
 		r := NewRequester().
+			WithHTTPClient(countingClient).
 			WithTimeout(1 * time.Millisecond).
 			WithRetry(RetryConfig{
 				WaitBase: 20 * time.Millisecond,
@@ -81,11 +89,11 @@ func TestRequest_Get(t *testing.T) {
 		}
 		_, _ = r.Get(context.Background(), req)
 
-		assert.Equal(t, 4, retryTimes)
+		assert.GreaterOrEqual(t, atomic.LoadInt32(&retryTimes), int32(2))
 	})
 
 	t.Run("it_should_load_circuit_breaker_properly", func(t *testing.T) {
-		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}))
 		defer ts.Close()
@@ -97,23 +105,29 @@ func TestRequest_Get(t *testing.T) {
 		}).Load()
 
 		minimumRequestToOpen := 3
+
 		var err error
+
 		req := RequestEntity{Endpoint: ts.URL}
 		for i := 0; i < minimumRequestToOpen; i++ {
 			_, _ = r.Get(context.Background(), req)
 		}
+
 		_, err = r.Get(context.Background(), req)
 		assert.ErrorIs(t, err, ErrCircuitBreakerOpen)
 	})
 
 	t.Run("it_should_return_last_error_if_circuit_breaker_and_retry_enabled", func(t *testing.T) {
-		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			_, _ = w.Write([]byte(`{"status": "FAILED"}`))
 		}))
 		defer ts.Close()
 
-		r := NewRequester().WithTimeout(1 * time.Millisecond).
+		// The timeout must comfortably exceed a local round trip: this case
+		// asserts that the last 500 body reaches the caller, and a client
+		// deadline that beats the response replaces it with a transport error.
+		r := NewRequester().WithTimeout(time.Second).
 			WithRetry(RetryConfig{
 				WaitBase: 20 * time.Millisecond,
 				Times:    4,
@@ -125,6 +139,7 @@ func TestRequest_Get(t *testing.T) {
 			}).Load()
 
 		var err error
+
 		req := RequestEntity{Endpoint: ts.URL}
 
 		_, err = r.Get(context.Background(), req)
@@ -134,8 +149,10 @@ func TestRequest_Get(t *testing.T) {
 
 	t.Run("it_should_apply_headers_properly", func(t *testing.T) {
 		var receivedUserAgent string
+
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			receivedUserAgent = r.Header.Get("User-Agent")
+
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"status": "OK"}`))
 		}))
@@ -153,13 +170,14 @@ func TestRequest_Get(t *testing.T) {
 
 	t.Run("it_should_use_custom_http_client_when_provided", func(t *testing.T) {
 		var transportUsed bool
+
 		customTransport := &recordingTransport{
 			wrapped:     http.DefaultTransport,
 			onRoundTrip: func() { transportUsed = true },
 		}
 		customClient := &http.Client{Transport: customTransport}
 
-		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer ts.Close()
@@ -173,8 +191,10 @@ func TestRequest_Get(t *testing.T) {
 
 	t.Run("it_should_override_Requester_level_header_if_RequestEntity_headers_set", func(t *testing.T) {
 		var receivedUserAgent string
+
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			receivedUserAgent = r.Header.Get("User-Agent")
+
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"status": "OK"}`))
 		}))

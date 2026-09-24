@@ -47,3 +47,19 @@ the default.
 
 **Backward-compatibility warning**: flag any change to an exported signature,
 struct field, interface, or error sentinel — it can break downstream services.
+
+## Test Types (Service Maturity declaration)
+
+- **Unit Tests**: REQUIRED — per-module `go test ./...`, aggregated by
+  `scripts/coverage.sh` and reported by the `unit-tests` check.
+- ❌ **Integration Tests**: Not applicable — this is a library with no
+  deployable artifact; DB and AWS dependencies are covered with go-sqlmock and
+  gomock, never a live backend.
+- ❌ **Visual Tests**: Not applicable — no UI.
+
+## Test files are never a coverage gap
+
+A path ending in `_test.go` is test code, not source: it is never itself a gap,
+however it changed. Lint work reformats test files and signature changes force
+edits in them, and neither is a reason to demand "a unit test for a test".
+Report a gap only against the non-test `.go` file whose behaviour is uncovered.

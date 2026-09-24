@@ -75,9 +75,7 @@ func TestQueue_SendMessageBatch(t *testing.T) {
 		assert.Error(t, err, "err should not be nil")
 		assert.NotNil(t, failed, "failed should not be nil")
 		assert.Equal(t, failed[0].Id, aws.String("test-id"), "failed id should be equal to test-id")
-
 	})
-
 }
 
 func TestQueue_DeleteMessageBatch(t *testing.T) {
@@ -120,7 +118,7 @@ func TestQueue_DeleteMessageBatch(t *testing.T) {
 	})
 }
 
-func TestQueue_getQueueUrl(t *testing.T) {
+func TestQueue_getQueueURL(t *testing.T) {
 	t.Run("should_return_queue_url_when_successful", func(t *testing.T) {
 		q, client := newQueue(t)
 
@@ -130,18 +128,18 @@ func TestQueue_getQueueUrl(t *testing.T) {
 				QueueUrl: aws.String("test-queue-url"),
 			}, nil)
 
-		queueUrl, err := q.getQueueUrl()
+		queueURL, err := q.getQueueURL()
 
 		assert.Nil(t, err, "err should be nil")
-		assert.Equal(t, queueUrl, aws.String("test-queue-url"), "queue url should be equal to test-queue-url")
+		assert.Equal(t, queueURL, aws.String("test-queue-url"), "queue url should be equal to test-queue-url")
 
 		t.Run("should_return_queue_url_from_cache_when_called_twice", func(_ *testing.T) {
 			client.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any(), gomock.Any()).Times(0) // should not be called
 
-			queueUrl, err := q.getQueueUrl()
+			queueURL, err := q.getQueueURL()
 
 			assert.Nil(t, err, "err should be nil")
-			assert.Equal(t, queueUrl, aws.String("test-queue-url"), "queue url should be equal to test-queue-url")
+			assert.Equal(t, queueURL, aws.String("test-queue-url"), "queue url should be equal to test-queue-url")
 		})
 	})
 
@@ -153,10 +151,10 @@ func TestQueue_getQueueUrl(t *testing.T) {
 			Times(3).
 			Return(nil, assert.AnError)
 
-		queueUrl, err := q.getQueueUrl()
+		queueURL, err := q.getQueueURL()
 
 		assert.Error(t, err, "err should not be nil")
-		assert.Nil(t, queueUrl, "queue url should be nil")
+		assert.Nil(t, queueURL, "queue url should be nil")
 	})
 }
 
@@ -182,6 +180,8 @@ func Test_getFailedEntries(t *testing.T) {
 }
 
 func newQueue(t *testing.T) (queue, *sqs.MockAPI) {
+	t.Helper()
+
 	ctrl := gomock.NewController(t)
 	client := sqs.NewMockSQS(ctrl)
 

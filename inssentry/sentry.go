@@ -63,8 +63,6 @@ func ErrorWithAdditionalData(err error, key string, value interface{}) {
 func Fatal(err error) {
 	if !cachedSettings.IsProduction {
 		panic(err)
-
-		return
 	}
 
 	sentry.CaptureException(err)

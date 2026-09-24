@@ -85,7 +85,9 @@ func makeLoader[K comparable, V any](getter func(key K) V) ttlcache.LoaderFunc[K
 			var v = getter(key)
 
 			item := c.Set(key, v, ttlcache.DefaultTTL)
+
 			return item
 		}
+
 	return fn
 }

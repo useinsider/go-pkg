@@ -12,11 +12,14 @@ func TakeSliceArg(arg interface{}) (out []interface{}, ok bool) {
 		ok = false
 		return
 	}
+
 	c := slice.Len()
 	out = make([]interface{}, c)
+
 	for i := 0; i < c; i++ {
 		out[i] = slice.Index(i).Interface()
 	}
+
 	return out, true
 }
 
@@ -25,6 +28,7 @@ func takeArg(arg interface{}, kind reflect.Kind) (val reflect.Value, ok bool) {
 	if val.Kind() == kind {
 		ok = true
 	}
+
 	return
 }
 
@@ -35,6 +39,7 @@ func createBatches(v interface{}, recordLimit int, byteLimit int) ([][]interface
 	}
 
 	var batches = make([][]interface{}, 0)
+
 	buffer := make([]interface{}, 0)
 	bufferSize := 0
 
